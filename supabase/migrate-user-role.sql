@@ -1,76 +1,73 @@
 -- ============================================================
 -- RUN THIS ONCE in Supabase SQL Editor
 -- 1) Removes extra profile columns (follower/post counts)
--- 2) Replaces is_admin (true/false) with user_role dropdown: user | admin
+-- 2) Replaces is_admin with user_role dropdown: user | admin
 -- ============================================================
 
--- Role dropdown type (shows as User / Admin in Supabase Table Editor)
+-- Step 1: Role dropdown type
 DO $$ BEGIN
   CREATE TYPE public.user_role AS ENUM ('user', 'admin');
 EXCEPTION
   WHEN duplicate_object THEN NULL;
 END $$;
 
--- Add user_role column
+-- Step 2: Add user_role column
 ALTER TABLE public.profiles
   ADD COLUMN IF NOT EXISTS user_role public.user_role NOT NULL DEFAULT 'user';
 
--- Copy old is_admin values into user_role (if is_admin still exists)
-DO $$
-BEGIN
-  IF EXISTS (
+-- Step 3: Copy is_admin → user_role (keep column for now)
+UPDATE public.profiles
+SET user_role = 'admin'
+WHERE is_admin = true
+  AND EXISTS (
     SELECT 1 FROM information_schema.columns
     WHERE table_schema = 'public' AND table_name = 'profiles' AND column_name = 'is_admin'
-  ) THEN
-    UPDATE public.profiles SET user_role = 'admin' WHERE is_admin = true;
-    ALTER TABLE public.profiles DROP COLUMN is_admin;
-  END IF;
-END $$;
+  );
 
--- Remove unused count columns (always show 0 — not needed)
+-- Step 4: DROP policies that depend on is_admin (must happen BEFORE dropping column)
+DROP POLICY IF EXISTS "Admins view all reports" ON public.reports;
+DROP POLICY IF EXISTS "Admins update reports" ON public.reports;
+DROP POLICY IF EXISTS "Admins manage tags" ON public.writing_tags;
+DROP POLICY IF EXISTS "Admins manage featured" ON public.featured_poem;
+DROP POLICY IF EXISTS "Admins can update profiles" ON public.profiles;
+
+-- Step 5: Now safe to drop is_admin and extra columns
+ALTER TABLE public.profiles DROP COLUMN IF EXISTS is_admin;
+
 ALTER TABLE public.profiles
   DROP COLUMN IF EXISTS followers_count,
   DROP COLUMN IF EXISTS following_count,
   DROP COLUMN IF EXISTS posts_count;
 
--- Make yourself first admin (change email if needed)
+-- Step 6: Recreate policies using user_role
+CREATE POLICY "Admins view all reports" ON public.reports FOR SELECT USING (
+  EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND user_role = 'admin')
+);
+
+CREATE POLICY "Admins update reports" ON public.reports FOR UPDATE USING (
+  EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND user_role = 'admin')
+);
+
+CREATE POLICY "Admins manage tags" ON public.writing_tags FOR ALL USING (
+  EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND user_role = 'admin')
+);
+
+CREATE POLICY "Admins manage featured" ON public.featured_poem FOR ALL USING (
+  EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND user_role = 'admin')
+);
+
+CREATE POLICY "Admins can update profiles" ON public.profiles FOR UPDATE USING (
+  EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND user_role = 'admin')
+);
+
+-- Step 7: Make yourself first admin (change email if needed)
 UPDATE public.profiles
 SET user_role = 'admin'
 WHERE id = (
   SELECT id FROM auth.users WHERE email = 'zahidzubair489@gmail.com'
 );
 
--- ============================================================
--- Update RLS policies (is_admin → user_role)
--- ============================================================
-DROP POLICY IF EXISTS "Admins view all reports" ON public.reports;
-CREATE POLICY "Admins view all reports" ON public.reports FOR SELECT USING (
-  EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND user_role = 'admin')
-);
-
-DROP POLICY IF EXISTS "Admins update reports" ON public.reports;
-CREATE POLICY "Admins update reports" ON public.reports FOR UPDATE USING (
-  EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND user_role = 'admin')
-);
-
-DROP POLICY IF EXISTS "Admins manage tags" ON public.writing_tags;
-CREATE POLICY "Admins manage tags" ON public.writing_tags FOR ALL USING (
-  EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND user_role = 'admin')
-);
-
-DROP POLICY IF EXISTS "Admins manage featured" ON public.featured_poem;
-CREATE POLICY "Admins manage featured" ON public.featured_poem FOR ALL USING (
-  EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND user_role = 'admin')
-);
-
-DROP POLICY IF EXISTS "Admins can update profiles" ON public.profiles;
-CREATE POLICY "Admins can update profiles" ON public.profiles FOR UPDATE USING (
-  EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND user_role = 'admin')
-);
-
--- ============================================================
--- Admin panel functions (website dropdown)
--- ============================================================
+-- Step 8: Admin panel functions (website dropdown)
 CREATE OR REPLACE FUNCTION public.get_users_for_admin()
 RETURNS TABLE (
   id UUID,
@@ -111,7 +108,6 @@ BEGIN
 END;
 $$;
 
--- Remove old function name if it exists
 DROP FUNCTION IF EXISTS public.set_user_admin(UUID, BOOLEAN);
 
 GRANT EXECUTE ON FUNCTION public.get_users_for_admin() TO authenticated;
