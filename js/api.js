@@ -105,6 +105,38 @@ const API = {
     return !error;
   },
 
+  async fetchAdminUsers() {
+    const sb = SupabaseClient.get();
+    if (!sb || !Auth.isAdmin()) return [];
+    const { data, error } = await sb.rpc('get_users_for_admin');
+    if (error) {
+      console.warn('fetchAdminUsers:', error.message);
+      return null;
+    }
+    return (data || []).map(u => ({
+      id: u.id,
+      email: u.email,
+      username: u.username,
+      displayName: u.display_name,
+      isAdmin: u.is_admin,
+      postsCount: u.posts_count || 0
+    }));
+  },
+
+  async setUserAdminRole(userId, isAdmin) {
+    const sb = SupabaseClient.get();
+    if (!sb || !Auth.isAdmin()) return false;
+    const { error } = await sb.rpc('set_user_admin', {
+      target_user_id: userId,
+      make_admin: isAdmin
+    });
+    if (error) {
+      console.warn('setUserAdminRole:', error.message);
+      return false;
+    }
+    return true;
+  },
+
   async getFeaturedPoemId() {
     const sb = SupabaseClient.get();
     if (!sb) return null;

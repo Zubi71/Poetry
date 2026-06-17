@@ -563,6 +563,10 @@ const App = {
     });
 
     // Admin panel
+    if (document.getElementById('admin-users-list')) {
+      this.loadAdminUsers();
+    }
+
     const saveTagsBtn = document.getElementById('save-tags-btn');
     if (saveTagsBtn) {
       saveTagsBtn.onclick = async () => {
@@ -614,6 +618,70 @@ const App = {
         Components.showToast('Report resolved');
         Router.navigate();
       };
+    });
+  },
+
+  async loadAdminUsers() {
+    const container = document.getElementById('admin-users-list');
+    if (!container) return;
+
+    const users = SupabaseClient.isEnabled()
+      ? await API.fetchAdminUsers()
+      : Storage.getAdminUsersList();
+
+    if (users === null) {
+      container.innerHTML = `
+        <p class="admin-error">Could not load users. Run <code>supabase/admin.sql</code> in Supabase SQL Editor first.</p>
+      `;
+      return;
+    }
+
+    if (!users.length) {
+      container.innerHTML = '<p class="empty-state">No registered users yet.</p>';
+      return;
+    }
+
+    const currentId = Auth.getCurrentUser()?.id;
+    container.innerHTML = users.map(u => `
+      <div class="admin-user-row">
+        <div class="admin-user-info">
+          <strong>${u.displayName || u.username || 'User'}</strong>
+          <span>${u.email || u.username || ''}</span>
+          <span class="admin-user-meta">${u.postsCount || 0} posts</span>
+        </div>
+        <select class="admin-role-select filter-select" data-user-id="${u.id}" ${u.id === currentId ? 'title="You cannot remove your own admin role"' : ''}>
+          <option value="user" ${!u.isAdmin ? 'selected' : ''}>User</option>
+          <option value="admin" ${u.isAdmin ? 'selected' : ''}>Admin</option>
+        </select>
+      </div>
+    `).join('');
+
+    container.querySelectorAll('.admin-role-select').forEach(select => {
+      select.addEventListener('change', async () => {
+        const userId = select.dataset.userId;
+        const makeAdmin = select.value === 'admin';
+        const currentUser = Auth.getCurrentUser();
+
+        if (userId === currentUser?.id && !makeAdmin) {
+          Components.showToast('You cannot remove your own admin role', 'error');
+          select.value = 'admin';
+          return;
+        }
+
+        let ok = false;
+        if (SupabaseClient.isEnabled()) {
+          ok = await API.setUserAdminRole(userId, makeAdmin);
+        } else {
+          ok = Storage.setLocalUserAdmin(userId, makeAdmin);
+        }
+
+        if (ok) {
+          Components.showToast(makeAdmin ? 'User promoted to Admin' : 'User set to regular User');
+        } else {
+          Components.showToast('Failed to update role', 'error');
+          this.loadAdminUsers();
+        }
+      });
     });
   }
 };

@@ -1022,8 +1022,16 @@ const Pages = {
       <div class="admin-page">
         <div class="page-header">
           <h1>🛡️ Admin Dashboard</h1>
-          <p>Manage tags, contests & moderation</p>
+          <p>Manage users, tags, contests & moderation</p>
         </div>
+
+        <section class="admin-section">
+          <h2>User Roles</h2>
+          <p class="section-desc">Assign <strong>Admin</strong> or <strong>User</strong> from the dropdown — updates the database instantly</p>
+          <div id="admin-users-list" class="admin-users-list">
+            <p class="admin-loading">Loading users…</p>
+          </div>
+        </section>
 
         <section class="admin-section">
           <h2>Dynamic Tag Manager</h2>

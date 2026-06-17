@@ -335,6 +335,31 @@ const Storage = {
     this.set(this.KEYS.WRITING_TAGS, tags);
   },
 
+  getAdminUsersList() {
+    const users = this.get('urdu_poetry_users', []);
+    const current = this.getUser();
+    const list = users.length ? users : (current && !current.isGuest ? [current] : []);
+    return list.map(u => ({
+      id: u.id,
+      email: u.email,
+      username: u.username || u.email?.split('@')[0],
+      displayName: u.name,
+      isAdmin: Boolean(u.isAdmin),
+      postsCount: (this.getUserPosts().filter(p => p.poetId === u.id)).length
+    }));
+  },
+
+  setLocalUserAdmin(userId, isAdmin) {
+    const users = this.get('urdu_poetry_users', []);
+    const updated = users.map(u => u.id === userId ? { ...u, isAdmin } : u);
+    this.set('urdu_poetry_users', updated);
+    const current = this.getUser();
+    if (current && current.id === userId) {
+      this.setUser({ ...current, isAdmin });
+    }
+    return true;
+  },
+
   getUserPosts() {
     return this.get(this.KEYS.USER_POSTS, []);
   },
