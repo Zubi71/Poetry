@@ -1,29 +1,17 @@
 const Pages = {
   home(params, query) {
+    Storage.processScheduledPosts();
     const tab = query.tab || 'foryou';
+    const allPoems = getAllPoems();
     let poems;
-    if (tab === 'trending') poems = getTrendingPoems();
-    else if (tab === 'latest') poems = getLatestPoems();
+    if (tab === 'trending') poems = allPoems.filter(p => p.trending);
+    else if (tab === 'latest') poems = allPoems.slice(0, 15);
     else if (tab === 'following') {
       const following = Storage.getFollowing();
-      poems = following.length ? APP_DATA.poems.filter(p => following.includes(p.poetId)) : APP_DATA.poems.slice(0, 5);
-    } else poems = APP_DATA.poems.slice(0, 10);
-
-    const slide = APP_DATA.heroSlides[0];
-    const heroPoem = getPoemById(slide.poemId);
+      poems = following.length ? allPoems.filter(p => following.includes(p.poetId)) : allPoems.slice(0, 5);
+    } else poems = allPoems.slice(0, 10);
 
     const content = `
-      <div class="hero-carousel">
-        <div class="hero-slide" style="background-image:url('${slide.image}')">
-          <div class="hero-overlay">
-            <p class="urdu-text hero-poem">${heroPoem ? heroPoem.text.split('\n')[0] : ''}</p>
-            <a href="#/poem/${slide.poemId}" class="btn btn-gold">Read full poem</a>
-          </div>
-        </div>
-        <div class="carousel-dots">
-          ${APP_DATA.heroSlides.map((s, i) => `<span class="dot ${i === 0 ? 'active' : ''}"></span>`).join('')}
-        </div>
-      </div>
       <div class="feed-tabs">
         <a href="#/?tab=foryou" class="feed-tab ${tab === 'foryou' ? 'active' : ''}">For You</a>
         <a href="#/?tab=trending" class="feed-tab ${tab === 'trending' ? 'active' : ''}">Trending</a>
@@ -41,7 +29,7 @@ const Pages = {
   },
 
   poems(params, query) {
-    let poems = [...APP_DATA.poems];
+    let poems = [...getAllPoems()];
     const filter = query.filter || (query.trending ? 'trending' : 'all');
     const search = query.q || '';
     const category = query.category || '';
@@ -217,22 +205,23 @@ const Pages = {
     const category = getCategoryById(poem.category);
     const liked = Storage.isLiked(poem.id);
     const bookmarked = Storage.isBookmarked(poem.id);
+    const tagLabel = poem.tagLabel || (category ? category.name : poem.category);
 
     const content = `
       <div class="poem-detail">
         <a href="#/poems" class="back-link">${Components.icon('back')} Back to Poems</a>
         <div class="poem-detail-header">
-          <a href="#/poet/${poem.poetId}" class="poet-info">
+          <a href="${poet ? `#/poet/${poem.poetId}` : '#/dashboard'}" class="poet-info">
             ${avatarImg(poem.poetName, '', poem.poetName)}
             <div>
               <span class="poet-name">${poem.poetName}</span>
               <span class="post-time">${poem.time}</span>
             </div>
           </a>
-          <a href="#/categories/${poem.category}" class="category-badge" style="background:${category.color}">${category.name}</a>
+          <span class="category-badge" style="background:${category ? category.color : '#D4AF37'}">${tagLabel}</span>
         </div>
-        <div class="poem-detail-content">
-          <p class="urdu-text large">${poem.text.replace(/\n/g, '<br>')}</p>
+        <div class="poem-detail-content poem-card-${poem.cardTheme || 'classic-dark'}">
+          ${formatPoemHtml(poem.text, poem.cardTheme)}
           ${poem.english ? `<p class="english-text">${poem.english}</p>` : ''}
         </div>
         <div class="poem-actions">
@@ -358,6 +347,78 @@ const Pages = {
   },
 
   voiceRooms(params) {
+    if (params.id) {
+      const roomId = parseInt(params.id);
+      const room = getVoiceRoomById(roomId);
+      if (!room) {
+        return Components.renderAppLayout('<div class="page-header"><h1>Room not found</h1><a href="#/voice-rooms" class="btn btn-gold">Back to Rooms</a></div>');
+      }
+      if (room.premium && !Auth.isPremium()) {
+        return Components.renderAppLayout(`
+          <div class="page-header">
+            <h1>Premium Room</h1>
+            <p>${room.title} requires a Premium subscription.</p>
+            <a href="#/premium" class="btn btn-gold">Upgrade to Premium</a>
+            <a href="#/voice-rooms" class="btn btn-outline-gold">Back</a>
+          </div>
+        `);
+      }
+
+      Storage.joinRoom(roomId);
+      const user = Auth.getCurrentUser();
+      const listeners = APP_DATA.roomListeners[roomId] || [room.host];
+      const messages = Storage.getRoomMessages(roomId);
+
+      const content = `
+        <div class="voice-room-view">
+          <div class="voice-room-header">
+            <a href="#/voice-rooms" class="back-link">${Components.icon('back')}</a>
+            <div class="voice-room-title">
+              <h2>${room.title}</h2>
+              <p>Host: ${room.host} · ${room.participants + 1} in room</p>
+            </div>
+            <span class="live-badge">● Live</span>
+          </div>
+
+          <div class="voice-room-stage">
+            <p class="stage-label">On stage</p>
+            <div class="voice-speakers">
+              ${listeners.slice(0, 6).map((name, i) => `
+                <div class="voice-speaker ${i === 0 ? 'host' : ''} ${name === user.name ? 'me' : ''}">
+                  ${avatarImg(name, 'speaker-avatar', name)}
+                  <span>${name === user.name ? 'You' : name.split(' ')[0]}</span>
+                  <span class="mic-indicator">${i < 2 ? '🎙️' : '🔇'}</span>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+
+          <div class="voice-room-chat">
+            <p class="chat-label">Live discussion</p>
+            <div class="voice-room-messages" id="voice-room-messages">
+              ${messages.map(m => `
+                <div class="chat-message ${m.type === 'me' ? 'sent' : 'received'} ${m.type === 'host' ? 'host-message' : ''}">
+                  ${m.type !== 'me' ? `<strong>${m.from}</strong>` : ''}
+                  <p>${m.text}</p>
+                  <span>${m.time}</span>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+
+          <div class="voice-room-controls">
+            <button type="button" class="mic-btn" id="voice-mic-btn" title="Toggle microphone">🎤</button>
+            <form class="voice-room-form" id="voice-room-form" data-room-id="${roomId}">
+              <input type="text" placeholder="Share poetry or join the discussion..." required maxlength="500">
+              <button type="submit" class="btn btn-gold">Send</button>
+            </form>
+            <button type="button" class="btn btn-outline-gold leave-room-btn" data-room-id="${roomId}">Leave</button>
+          </div>
+        </div>
+      `;
+      return Components.renderAppLayout(content, { noSidebar: true, showPremium: false });
+    }
+
     const joined = Storage.getJoinedRooms();
     const content = `
       <div class="page-header">
@@ -366,7 +427,7 @@ const Pages = {
         ${Auth.canCreateRoom() ? '<button class="btn btn-gold" id="create-room-btn">Create Room</button>' : '<a href="#/premium" class="btn btn-outline-gold">Premium: Create Rooms</a>'}
       </div>
       <div class="rooms-grid">
-        ${APP_DATA.voiceRooms.map(room => `
+        ${getAllVoiceRooms().map(room => `
           <div class="room-card ${room.premium ? 'premium-room' : ''}">
             <div class="room-header">
               <h3>${room.title}</h3>
@@ -376,7 +437,7 @@ const Pages = {
             <p>Host: ${room.host}</p>
             <p>${room.participants} participants</p>
             <button class="btn ${joined.includes(room.id) ? 'btn-outline-gold' : 'btn-gold'} join-room-btn" data-room-id="${room.id}">
-              ${joined.includes(room.id) ? 'Joined ✓' : 'Join Room'}
+              ${joined.includes(room.id) ? 'Enter Room' : 'Join Room'}
             </button>
           </div>
         `).join('')}
@@ -549,6 +610,14 @@ const Pages = {
       </div>
       <div class="settings-sections">
         <section class="settings-section">
+          <h2>Quick Links</h2>
+          <div class="quick-links">
+            <a href="#/dashboard" class="btn btn-outline-gold">My Dashboard</a>
+            <a href="#/settings" class="btn btn-outline-gold">Account Settings</a>
+            ${Auth.isAdmin() ? '<a href="#/admin" class="btn btn-gold">Admin Panel</a>' : ''}
+          </div>
+        </section>
+        <section class="settings-section">
           <h2>Account Settings</h2>
           <form id="account-form" class="settings-form">
             <div class="form-group">
@@ -681,8 +750,8 @@ const Pages = {
           </div>
           <form id="login-form" class="auth-form">
             <div class="form-group">
-              <label>Email</label>
-              <input type="email" name="email" required placeholder="Enter your email">
+              <label>Email or Username</label>
+              <input type="text" name="email" required placeholder="Email or username" autocomplete="username">
             </div>
             <div class="form-group">
               <label>Password</label>
@@ -729,8 +798,12 @@ const Pages = {
               <input type="text" name="name" required placeholder="Enter your full name">
             </div>
             <div class="form-group">
+              <label>Username</label>
+              <input type="text" name="username" required pattern="[a-zA-Z0-9_]{3,20}" placeholder="Choose a unique username" autocomplete="username">
+            </div>
+            <div class="form-group">
               <label>Email</label>
-              <input type="email" name="email" required placeholder="Enter your email">
+              <input type="email" name="email" required placeholder="Enter your email" autocomplete="email">
             </div>
             <div class="form-group">
               <label>Password</label>
@@ -835,6 +908,173 @@ const Pages = {
       </div>
     `;
     return Components.renderAppLayout(content, { authPage: true });
+  },
+
+  dashboard() {
+    const user = Auth.getCurrentUser();
+    const stats = Storage.getAnalytics();
+    const drafts = Storage.getDrafts();
+    const scheduled = Storage.getScheduledPosts();
+    const myPosts = Storage.getUserPosts().filter(p => p.poetName === user.name);
+    const cardTheme = Storage.getCardTheme();
+    const themes = [
+      { id: 'classic-dark', label: 'Classic Dark', icon: '🌙' },
+      { id: 'golden-border', label: 'Golden Border', icon: '✨' },
+      { id: 'premium-paper', label: 'Premium Paper', icon: '📜' }
+    ];
+
+    const content = `
+      <div class="dashboard-page">
+        <div class="page-header dashboard-header">
+          <div class="dashboard-profile">
+            ${avatarImg(user.name, 'dashboard-avatar', user.name)}
+            <div>
+              <h1>${user.name}</h1>
+              <p>${user.isGuest ? 'Guest User' : (user.premium ? '👑 Premium Poet' : 'Free Member')}</p>
+            </div>
+          </div>
+          <button type="button" class="btn btn-gold" id="dashboard-write-btn">+ Write Poetry</button>
+        </div>
+
+        <div class="analytics-grid">
+          <div class="stat-card"><span class="stat-icon">❤️</span><strong>${Components.formatNumber(stats.likes + Storage.getLikes().length)}</strong><span>Hearts</span></div>
+          <div class="stat-card"><span class="stat-icon">💬</span><strong>${stats.comments}</strong><span>Comments</span></div>
+          <div class="stat-card"><span class="stat-icon">↗️</span><strong>${stats.shares}</strong><span>Shares</span></div>
+          <div class="stat-card"><span class="stat-icon">🔖</span><strong>${Storage.getBookmarks().length}</strong><span>Saves</span></div>
+        </div>
+
+        <section class="dashboard-section">
+          <h2>Poetry Card Customizer</h2>
+          <p class="section-desc">Choose your default card style for new posts and downloads</p>
+          <div class="card-theme-options dashboard-themes">
+            ${themes.map(t => `
+              <button type="button" class="theme-chip dashboard-theme-btn ${cardTheme === t.id ? 'active' : ''}" data-theme="${t.id}">
+                <span>${t.icon}</span> ${t.label}
+              </button>
+            `).join('')}
+          </div>
+          <div class="theme-preview-box poem-card-${cardTheme}">
+            ${formatPoemHtml('ہر مصرعہ ایک لائن میں\nخوبصورت انداز میں', cardTheme)}
+          </div>
+        </section>
+
+        <section class="dashboard-section">
+          <div class="section-row">
+            <h2>My Drafts</h2>
+            <button type="button" class="btn btn-outline-gold btn-sm" id="new-draft-btn">+ New Draft</button>
+          </div>
+          ${drafts.length ? drafts.map(d => `
+            <div class="draft-card">
+              <div class="draft-preview urdu-text">${d.text.split('\n')[0]}...</div>
+              <div class="draft-actions">
+                <button type="button" class="btn btn-gold btn-sm edit-draft-btn" data-draft-id="${d.id}">Continue Writing</button>
+                <button type="button" class="btn btn-ghost btn-sm delete-draft-btn" data-draft-id="${d.id}">Delete</button>
+              </div>
+            </div>
+          `).join('') : '<p class="empty-state">No drafts yet. Start writing!</p>'}
+        </section>
+
+        <section class="dashboard-section">
+          <h2>Scheduled Posts</h2>
+          ${scheduled.length ? scheduled.map(s => `
+            <div class="scheduled-card">
+              <div class="urdu-text">${s.text.split('\n')[0]}...</div>
+              <p>Scheduled: ${new Date(s.scheduleAt).toLocaleString()}</p>
+              <button type="button" class="btn btn-ghost btn-sm cancel-scheduled-btn" data-id="${s.id}">Cancel</button>
+            </div>
+          `).join('') : '<p class="empty-state">No scheduled posts.</p>'}
+        </section>
+
+        <section class="dashboard-section">
+          <h2>My Posts (${myPosts.length})</h2>
+          <div class="poem-feed">
+            ${myPosts.length ? myPosts.map(p => Components.renderPoemCard(p)).join('') : '<p class="empty-state">You haven\'t posted yet.</p>'}
+          </div>
+        </section>
+
+        <div class="dashboard-links">
+          <a href="#/bookmarks">Bookmarks</a>
+          <a href="#/history">History</a>
+          <a href="#/settings">Settings</a>
+          <a href="#/premium">Premium</a>
+        </div>
+      </div>
+    `;
+    return Components.renderAppLayout(content);
+  },
+
+  admin() {
+    if (!Auth.isAdmin()) {
+      return Components.renderAppLayout(`
+        <div class="empty-state">
+          <h2>Admin Access Required</h2>
+          <p>Login with admin@urdupoetry.com to access the admin panel.</p>
+          <a href="#/login" class="btn btn-gold">Login</a>
+        </div>
+      `);
+    }
+
+    const tags = Storage.getWritingTags();
+    const reports = Storage.getReports().filter(r => r.status === 'pending');
+    const contests = APP_DATA.contests.filter(c => c.status === 'active');
+
+    const content = `
+      <div class="admin-page">
+        <div class="page-header">
+          <h1>🛡️ Admin Dashboard</h1>
+          <p>Manage tags, contests & moderation</p>
+        </div>
+
+        <section class="admin-section">
+          <h2>Dynamic Tag Manager</h2>
+          <p class="section-desc">Add, edit or remove scrolling tags in the writing window</p>
+          <div class="admin-tags-list">
+            ${tags.map(tag => `
+              <div class="admin-tag-row">
+                <input type="text" class="tag-label-input urdu-text" value="${tag.label}" data-tag-id="${tag.id}" data-field="label">
+                <input type="text" class="tag-en-input" value="${tag.en}" data-tag-id="${tag.id}" data-field="en" placeholder="English">
+                <button type="button" class="btn btn-ghost btn-sm delete-tag-btn" data-tag-id="${tag.id}">Delete</button>
+              </div>
+            `).join('')}
+          </div>
+          <div class="admin-actions">
+            <button type="button" class="btn btn-outline-gold" id="add-tag-btn">+ Add Tag</button>
+            <button type="button" class="btn btn-gold" id="save-tags-btn">Save Tags</button>
+          </div>
+        </section>
+
+        <section class="admin-section">
+          <h2>Contest Manager</h2>
+          ${contests.map(c => `
+            <div class="contest-card">
+              <div>
+                <h3>${c.title}</h3>
+                <p>${c.entries} entries · Deadline: ${c.deadline} · Prize: ${c.prize}</p>
+              </div>
+              <a href="#/contests" class="btn btn-outline-gold btn-sm">View Submissions</a>
+            </div>
+          `).join('')}
+        </section>
+
+        <section class="admin-section">
+          <h2>Report & Moderation Queue (${reports.length})</h2>
+          ${reports.length ? reports.map(r => `
+            <div class="report-card">
+              <div>
+                <strong>${r.type === 'post' ? 'Post' : 'User'} Report #${r.id}</strong>
+                <p>${r.reason || 'Reported for review'}</p>
+                <span class="notif-time">${r.time}</span>
+              </div>
+              <div class="report-actions">
+                <button type="button" class="btn btn-gold btn-sm resolve-report-btn" data-id="${r.id}" data-action="approved">Approve</button>
+                <button type="button" class="btn btn-ghost btn-sm resolve-report-btn" data-id="${r.id}" data-action="removed">Remove</button>
+              </div>
+            </div>
+          `).join('') : '<p class="empty-state">No pending reports. Community is clean! ✓</p>'}
+        </section>
+      </div>
+    `;
+    return Components.renderAppLayout(content, { fullWidth: true });
   },
 
   notFound() {

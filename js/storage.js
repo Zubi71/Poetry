@@ -13,10 +13,20 @@ const Storage = {
     BLOCKED: 'urdu_poetry_blocked',
     REGISTERED_EVENTS: 'urdu_poetry_registered_events',
     JOINED_ROOMS: 'urdu_poetry_joined_rooms',
+    ROOM_MESSAGES: 'urdu_poetry_room_messages',
+    CUSTOM_ROOMS: 'urdu_poetry_custom_rooms',
     CONTEST_ENTRIES: 'urdu_poetry_contest_entries',
     AD_CLICKS: 'urdu_poetry_ad_clicks',
     AD_VIEWS: 'urdu_poetry_ad_views',
-    SETTINGS: 'urdu_poetry_settings'
+    SETTINGS: 'urdu_poetry_settings',
+    WRITING_TAGS: 'urdu_poetry_writing_tags',
+    USER_POSTS: 'urdu_poetry_user_posts',
+    DRAFTS: 'urdu_poetry_drafts',
+    SCHEDULED: 'urdu_poetry_scheduled',
+    REPORTS: 'urdu_poetry_reports',
+    FEATURED: 'urdu_poetry_featured',
+    CARD_THEME: 'urdu_poetry_card_theme',
+    ANALYTICS: 'urdu_poetry_analytics'
   },
 
   get(key, defaultVal = null) {
@@ -218,8 +228,45 @@ const Storage = {
     if (!rooms.includes(roomId)) {
       rooms.push(roomId);
       this.set(this.KEYS.JOINED_ROOMS, rooms);
+      this.addNotification({ type: 'room', text: 'Joined voice room', roomId });
     }
     return rooms;
+  },
+
+  leaveRoom(roomId) {
+    const rooms = this.getJoinedRooms().filter(id => id !== roomId);
+    this.set(this.KEYS.JOINED_ROOMS, rooms);
+    return rooms;
+  },
+
+  getCustomRooms() {
+    return this.get(this.KEYS.CUSTOM_ROOMS, []);
+  },
+
+  addCustomRoom(room) {
+    const rooms = this.getCustomRooms();
+    rooms.push(room);
+    this.set(this.KEYS.CUSTOM_ROOMS, rooms);
+    return room;
+  },
+
+  getRoomMessages(roomId) {
+    const rid = parseInt(roomId);
+    const saved = this.get(this.KEYS.ROOM_MESSAGES, {});
+    const seed = APP_DATA.roomChatMessages[rid] || [];
+    return [...seed, ...(saved[rid] || [])];
+  },
+
+  addRoomMessage(roomId, text) {
+    const rid = parseInt(roomId);
+    const user = Auth.getCurrentUser();
+    const saved = this.get(this.KEYS.ROOM_MESSAGES, {});
+    const list = saved[rid] || [];
+    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    list.push({ from: user.name || 'You', text, time, type: 'me' });
+    saved[rid] = list;
+    this.set(this.KEYS.ROOM_MESSAGES, saved);
+    return list;
   },
 
   getContestEntries() {
@@ -270,5 +317,134 @@ const Storage = {
       this.set(this.KEYS.BLOCKED, blocked);
     }
     return blocked;
+  },
+
+  getWritingTags() {
+    return this.get(this.KEYS.WRITING_TAGS, [
+      { id: 1, label: 'شعر', en: 'Sher' },
+      { id: 2, label: 'قطعہ', en: 'Qita' },
+      { id: 3, label: 'غزل', en: 'Ghazal' },
+      { id: 4, label: 'نظم', en: 'Nazm' },
+      { id: 5, label: 'رباعی', en: 'Rubai' },
+      { id: 6, label: 'شاعری', en: 'Shayari' },
+      { id: 7, label: 'اقتباس', en: 'Quote' }
+    ]);
+  },
+
+  saveWritingTags(tags) {
+    this.set(this.KEYS.WRITING_TAGS, tags);
+  },
+
+  getUserPosts() {
+    return this.get(this.KEYS.USER_POSTS, []);
+  },
+
+  addUserPost(post) {
+    const posts = this.getUserPosts();
+    const newPost = {
+      id: Date.now(),
+      likes: 0,
+      comments: 0,
+      shares: 0,
+      time: 'Just now',
+      trending: false,
+      userPost: true,
+      ...post
+    };
+    posts.unshift(newPost);
+    this.set(this.KEYS.USER_POSTS, posts);
+    this.incrementAnalytics('posts');
+    return newPost;
+  },
+
+  getDrafts() {
+    return this.get(this.KEYS.DRAFTS, []);
+  },
+
+  saveDraft(draft) {
+    const drafts = this.getDrafts();
+    if (draft.id) {
+      const idx = drafts.findIndex(d => d.id === draft.id);
+      if (idx > -1) drafts[idx] = { ...drafts[idx], ...draft, updatedAt: new Date().toISOString() };
+      else drafts.unshift({ ...draft, id: draft.id, updatedAt: new Date().toISOString() });
+    } else {
+      drafts.unshift({ ...draft, id: Date.now(), updatedAt: new Date().toISOString() });
+    }
+    this.set(this.KEYS.DRAFTS, drafts);
+    return drafts;
+  },
+
+  deleteDraft(id) {
+    const drafts = this.getDrafts().filter(d => d.id !== id);
+    this.set(this.KEYS.DRAFTS, drafts);
+  },
+
+  getScheduledPosts() {
+    return this.get(this.KEYS.SCHEDULED, []);
+  },
+
+  addScheduledPost(post) {
+    const scheduled = this.getScheduledPosts();
+    scheduled.push({ ...post, id: Date.now(), createdAt: new Date().toISOString() });
+    this.set(this.KEYS.SCHEDULED, scheduled);
+    return scheduled;
+  },
+
+  deleteScheduled(id) {
+    this.set(this.KEYS.SCHEDULED, this.getScheduledPosts().filter(p => p.id !== id));
+  },
+
+  processScheduledPosts() {
+    const scheduled = this.getScheduledPosts();
+    const now = new Date();
+    const due = scheduled.filter(p => new Date(p.scheduleAt) <= now);
+    const remaining = scheduled.filter(p => new Date(p.scheduleAt) > now);
+    due.forEach(p => this.addUserPost(p));
+    this.set(this.KEYS.SCHEDULED, remaining);
+    return due.length;
+  },
+
+  getReports() {
+    return this.get(this.KEYS.REPORTS, []);
+  },
+
+  addReport(report) {
+    const reports = this.getReports();
+    reports.unshift({ id: Date.now(), status: 'pending', time: 'Just now', ...report });
+    this.set(this.KEYS.REPORTS, reports);
+    return reports;
+  },
+
+  resolveReport(id, action) {
+    const reports = this.getReports().map(r =>
+      r.id === id ? { ...r, status: action, resolvedAt: new Date().toISOString() } : r
+    );
+    this.set(this.KEYS.REPORTS, reports);
+  },
+
+  getFeaturedPoem() {
+    return this.get(this.KEYS.FEATURED, null);
+  },
+
+  setFeaturedPoem(poemId) {
+    this.set(this.KEYS.FEATURED, poemId);
+  },
+
+  getCardTheme() {
+    return this.get(this.KEYS.CARD_THEME, 'classic-dark');
+  },
+
+  setCardTheme(theme) {
+    this.set(this.KEYS.CARD_THEME, theme);
+  },
+
+  getAnalytics() {
+    return this.get(this.KEYS.ANALYTICS, { likes: 0, comments: 0, shares: 0, saves: 0, posts: 0 });
+  },
+
+  incrementAnalytics(type) {
+    const stats = this.getAnalytics();
+    stats[type] = (stats[type] || 0) + 1;
+    this.set(this.KEYS.ANALYTICS, stats);
   }
 };

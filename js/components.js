@@ -42,6 +42,7 @@ const Components = {
   sidebarLinks() {
     return [
       { path: '/', icon: 'home', label: 'Home' },
+      { action: 'write', icon: 'plus', label: 'Write Poetry' },
       { path: '/poems', icon: 'poems', label: 'All Poems' },
       { path: '/poems?trending=1', icon: 'trending', label: 'Trending' },
       { path: '/categories', icon: 'categories', label: 'Categories' },
@@ -53,7 +54,8 @@ const Components = {
       { path: '/bookmarks', icon: 'bookmarks', label: 'Bookmarks' },
       { path: '/history', icon: 'history', label: 'History' },
       { path: '/messages', icon: 'messages', label: 'Messages' },
-      { path: '/settings', icon: 'settings', label: 'Settings' }
+      { path: '/settings', icon: 'settings', label: 'Settings' },
+      { path: '/dashboard', icon: 'profile', label: 'Dashboard' }
     ];
   },
 
@@ -94,7 +96,12 @@ const Components = {
     return `
       <aside class="sidebar" id="sidebar">
         <nav class="sidebar-nav">
-          ${links.map(link => `
+          ${links.map(link => link.action === 'write' ? `
+            <button type="button" class="sidebar-link open-write-btn">
+              <span class="sidebar-icon">${this.icon(link.icon)}</span>
+              <span>${link.label}</span>
+            </button>
+          ` : `
             <a href="#${link.path}" class="sidebar-link ${this.isActive(link.path.split('?')[0]) ? 'active' : ''}">
               <span class="sidebar-icon">${this.icon(link.icon)}</span>
               <span>${link.label}</span>
@@ -117,14 +124,19 @@ const Components = {
     const items = [
       { path: '/', icon: 'home', label: 'Home' },
       { path: '/poems', icon: 'explore', label: 'Explore' },
-      { path: '/contests', icon: 'plus', label: 'Create', special: true },
+      { path: null, icon: 'plus', label: 'Create', special: true, action: 'write' },
       { path: '/messages', icon: 'messages', label: 'Messages' },
-      { path: '/settings', icon: 'profile', label: 'Profile' }
+      { path: '/dashboard', icon: 'profile', label: 'Profile' }
     ];
     return `
       <nav class="bottom-nav">
-        ${items.map(item => `
-          <a href="#${item.path}" class="bottom-nav-item ${item.special ? 'special' : ''} ${this.isActive(item.path) ? 'active' : ''}">
+        ${items.map(item => item.action === 'write' ? `
+          <button type="button" class="bottom-nav-item special open-write-btn" id="create-post-btn">
+            <span class="bottom-nav-icon">${this.icon(item.icon)}</span>
+            <span>${item.label}</span>
+          </button>
+        ` : `
+          <a href="#${item.path}" class="bottom-nav-item ${this.isActive(item.path) ? 'active' : ''}">
             <span class="bottom-nav-icon">${this.icon(item.icon)}</span>
             <span>${item.label}</span>
           </a>
@@ -204,20 +216,22 @@ const Components = {
     const category = getCategoryById(poem.category);
     const liked = Storage.isLiked(poem.id);
     const bookmarked = Storage.isBookmarked(poem.id);
+    const theme = poem.cardTheme || 'classic-dark';
+    const tagLabel = poem.tagLabel || (category ? category.name : poem.category);
     return `
-      <article class="poem-card" data-poem-id="${poem.id}">
+      <article class="poem-card poem-card-${theme}" data-poem-id="${poem.id}">
         <div class="poem-card-header">
-          <a href="#/poet/${poem.poetId}" class="poet-info">
+          <a href="${poet ? `#/poet/${poem.poetId}` : '#/dashboard'}" class="poet-info">
             ${avatarImg(poem.poetName, '', poem.poetName)}
             <div>
               <span class="poet-name">${poem.poetName}</span>
               <span class="post-time">${poem.time}</span>
             </div>
           </a>
-          <a href="#/categories/${poem.category}" class="category-badge" style="background:${category ? category.color : '#D4AF37'}">${category ? category.name : poem.category}</a>
+          <span class="category-badge" style="background:${category ? category.color : '#D4AF37'}">${tagLabel}</span>
         </div>
         <a href="#/poem/${poem.id}" class="poem-content">
-          <p class="urdu-text">${poem.text.replace(/\n/g, '<br>')}</p>
+          ${formatPoemHtml(poem.text, theme)}
         </a>
         ${showActions ? `
           <div class="poem-actions">
@@ -329,7 +343,7 @@ const Components = {
       <div class="app-layout">
         ${this.renderHeader()}
         ${Auth.showAds() ? this.renderAd('header') : ''}
-        <div class="main-container ${fullWidth ? 'full-width' : ''}">
+        <div class="main-container ${fullWidth ? 'full-width' : ''} ${noSidebar ? 'no-sidebar' : ''}">
           ${noSidebar ? '' : this.renderSidebar()}
           <main class="main-content" id="main-content">${content}</main>
           ${noSidebar || fullWidth ? '' : this.renderRightSidebar()}
@@ -356,6 +370,7 @@ const Components = {
 
   showGuestLimitModal() {
     const root = document.getElementById('modal-root');
+    this.openModalLock();
     root.innerHTML = `
       <div class="modal-overlay active" id="guest-limit-modal">
         <div class="modal guest-limit-modal">
@@ -371,12 +386,19 @@ const Components = {
       </div>
     `;
     document.getElementById('guest-limit-close').addEventListener('click', () => {
-      root.innerHTML = '';
+      this.closeModal();
     });
+    const loginLink = document.getElementById('guest-limit-login');
+    if (loginLink) {
+      loginLink.addEventListener('click', () => {
+        this.closeModal();
+      });
+    }
   },
 
   showModal(title, content, actions = '') {
     const root = document.getElementById('modal-root');
+    this.openModalLock();
     root.innerHTML = `
       <div class="modal-overlay active">
         <div class="modal">
@@ -387,11 +409,19 @@ const Components = {
       </div>
     `;
     root.querySelector('.modal-overlay').addEventListener('click', (e) => {
-      if (e.target.classList.contains('modal-overlay')) root.innerHTML = '';
+      if (e.target.classList.contains('modal-overlay')) this.closeModal();
     });
   },
 
   closeModal() {
-    document.getElementById('modal-root').innerHTML = '';
-  }
+    const root = document.getElementById('modal-root');
+    if (root) root.innerHTML = '';
+    document.body.classList.remove('modal-open');
+    document.body.style.overflow = '';
+  },
+
+  openModalLock() {
+    document.body.classList.add('modal-open');
+    document.body.style.overflow = 'hidden';
+  },
 };

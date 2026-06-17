@@ -132,6 +132,32 @@ const APP_DATA = {
     { id: 3, user: 'Faiz Ahmed Faiz', lastMessage: 'Your comment was wonderful.', time: '2 days ago', unread: 1 }
   ],
 
+  roomChatMessages: {
+    1: [
+      { from: 'Jaun Elia', text: 'Welcome everyone. Share a verse that moved you today.', time: 'Just now', type: 'host' },
+      { from: 'Sara Ahmed', text: 'Jaun sahab, your ghazal on longing is unmatched.', time: '2 min ago' },
+      { from: 'Ali Hassan', text: 'کوئی دم کا مہمان ہے عمر سراپا درد ہے', time: '1 min ago' }
+    ],
+    2: [
+      { from: 'Ahmad Faraz', text: 'Ghazal lovers, recite your favorite couplet tonight.', time: 'Just now', type: 'host' },
+      { from: 'Areeb Khan', text: 'رنجش ہی سہی دل ہی دکھانے کے لیے آ', time: '3 min ago' }
+    ],
+    3: [
+      { from: 'Mirza Ghalib', text: 'Premium lounge is open. Elegant verse only.', time: 'Just now', type: 'host' }
+    ],
+    4: [
+      { from: 'Parveen Shakir', text: 'Night shayari session has begun. Who will start?', time: 'Just now', type: 'host' },
+      { from: 'Fatima Noor', text: 'وہ تو خوب تھا کہ آ گیا', time: '1 min ago' }
+    ]
+  },
+
+  roomListeners: {
+    1: ['Jaun Elia', 'Sara Ahmed', 'Ali Hassan', 'Areeb Khan', 'Fatima Noor'],
+    2: ['Ahmad Faraz', 'Areeb Khan', 'Sara Ahmed', 'Hassan Raza'],
+    3: ['Mirza Ghalib', 'Allama Iqbal', 'Faiz Ahmed Faiz'],
+    4: ['Parveen Shakir', 'Fatima Noor', 'Sara Ahmed', 'Ali Hassan', 'Areeb Khan', 'Hassan Raza']
+  },
+
   chatMessages: {
     1: [
       { from: 'them', text: 'Assalamualaikum! Thank you for following me.', time: '10:00 AM' },
@@ -150,6 +176,15 @@ const APP_DATA = {
   }
 };
 
+function getAllVoiceRooms() {
+  return [...APP_DATA.voiceRooms, ...Storage.getCustomRooms()];
+}
+
+function getVoiceRoomById(id) {
+  const rid = parseInt(id);
+  return getAllVoiceRooms().find(r => r.id === rid);
+}
+
 function getPoetById(id) {
   const poet = APP_DATA.poets.find(p => p.id === parseInt(id));
   if (poet && !poet.avatar) poet.avatar = getAvatarUrl(poet.name);
@@ -157,7 +192,12 @@ function getPoetById(id) {
 }
 
 function getPoemById(id) {
-  return APP_DATA.poems.find(p => p.id === parseInt(id));
+  const pid = parseInt(id);
+  const remote = (window.REMOTE_POEMS || []).find(p => p.id === pid);
+  if (remote) return remote;
+  const userPost = Storage.getUserPosts().find(p => p.id === pid);
+  if (userPost) return userPost;
+  return APP_DATA.poems.find(p => p.id === pid);
 }
 
 function getCategoryById(id) {

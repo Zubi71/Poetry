@@ -11,6 +11,7 @@ const Router = {
     { path: '/top-poets', handler: 'topPoets' },
     { path: '/mushaira', handler: 'mushaira' },
     { path: '/voice-rooms', handler: 'voiceRooms' },
+    { path: '/voice-rooms/:id', handler: 'voiceRooms' },
     { path: '/contests', handler: 'contests' },
     { path: '/messages', handler: 'messages' },
     { path: '/messages/:id', handler: 'messages' },
@@ -18,6 +19,8 @@ const Router = {
     { path: '/bookmarks', handler: 'bookmarks' },
     { path: '/history', handler: 'history' },
     { path: '/settings', handler: 'settings' },
+    { path: '/dashboard', handler: 'dashboard' },
+    { path: '/admin', handler: 'admin' },
     { path: '/premium', handler: 'premium' },
     { path: '/login', handler: 'login' },
     { path: '/register', handler: 'register' },
@@ -88,8 +91,11 @@ const Router = {
   },
 
   navigate() {
+    Components.closeModal();
+
     const path = this.getCurrentPath();
     const query = this.getQuery();
+    if (!path.startsWith('/voice-rooms/')) App._stopMic?.();
     const match = this.matchRoute(path);
 
     const app = document.getElementById('app');
@@ -128,6 +134,8 @@ const Router = {
       bookmarks: 'Bookmarks',
       history: 'Reading History',
       settings: 'Settings',
+      dashboard: 'My Dashboard',
+      admin: 'Admin Panel',
       premium: 'Premium',
       login: 'Sign In',
       register: 'Sign Up',

@@ -1,10 +1,26 @@
 const App = {
-  init() {
+  _micStream: null,
+
+  _stopMic() {
+    if (this._micStream) {
+      this._micStream.getTracks().forEach(track => track.stop());
+      this._micStream = null;
+    }
+  },
+
+  async init() {
     const storedUser = Storage.getUser();
     if (storedUser && storedUser.avatar && String(storedUser.avatar).includes('pravatar')) {
       storedUser.avatar = getAvatarUrl(storedUser.name || 'User');
       Storage.setUser(storedUser);
     }
+    Components.closeModal();
+
+    if (SupabaseClient.isEnabled()) {
+      await Auth.init();
+      await loadRemoteData();
+    }
+
     Router.init();
     this.bindGlobalEvents();
   },
@@ -14,6 +30,11 @@ const App = {
       const adLink = e.target.closest('[data-ad-click]');
       if (adLink) {
         Storage.trackAdClick(adLink.dataset.adClick);
+      }
+
+      if (e.target.closest('.open-write-btn')) {
+        e.preventDefault();
+        Write.openModal();
       }
     });
   },
@@ -46,9 +67,16 @@ const App = {
 
     // Poem actions
     document.querySelectorAll('[data-action="like"]').forEach(btn => {
-      btn.onclick = () => {
+      btn.onclick = async () => {
         const id = parseInt(btn.dataset.id);
-        const liked = Storage.toggleLike(id);
+        let liked;
+        if (SupabaseClient.isEnabled() && Auth.isLoggedIn()) {
+          liked = await API.toggleLike(id);
+          if (liked !== null) Storage.set(Storage.KEYS.LIKES, await API.getUserLikes());
+        } else {
+          liked = Storage.toggleLike(id);
+        }
+        if (liked) Storage.incrementAnalytics('likes');
         btn.classList.toggle('active', liked);
         Components.showToast(liked ? 'Poem liked!' : 'Like removed');
         Router.navigate();
@@ -56,13 +84,20 @@ const App = {
     });
 
     document.querySelectorAll('[data-action="bookmark"]').forEach(btn => {
-      btn.onclick = () => {
+      btn.onclick = async () => {
         const id = parseInt(btn.dataset.id);
         if (!Storage.isBookmarked(id) && !Auth.canBookmark()) {
           Components.showToast('Bookmark limit reached. Upgrade to Premium!', 'error');
           return;
         }
-        const saved = Storage.toggleBookmark(id);
+        let saved;
+        if (SupabaseClient.isEnabled() && Auth.isLoggedIn()) {
+          saved = await API.toggleBookmark(id);
+          if (saved !== null) Storage.set(Storage.KEYS.BOOKMARKS, await API.getUserBookmarks());
+        } else {
+          saved = Storage.toggleBookmark(id);
+        }
+        if (saved) Storage.incrementAnalytics('saves');
         btn.classList.toggle('active', saved);
         Components.showToast(saved ? 'Poem saved!' : 'Removed from bookmarks');
         Router.navigate();
@@ -75,8 +110,10 @@ const App = {
         const url = `${location.origin}${location.pathname}#/poem/${id}`;
         if (navigator.share) {
           navigator.share({ title: 'Urdu Poetry', url });
+          Storage.incrementAnalytics('shares');
         } else {
           navigator.clipboard?.writeText(url);
+          Storage.incrementAnalytics('shares');
           Components.showToast('Link copied to clipboard!');
         }
       };
@@ -110,7 +147,14 @@ const App = {
 
     // Report & Block
     document.querySelectorAll('.report-btn').forEach(btn => {
-      btn.onclick = () => {
+      btn.onclick = async () => {
+        const report = {
+          type: btn.dataset.type || 'post',
+          targetId: btn.dataset.id,
+          reason: 'User reported content for moderation review'
+        };
+        if (SupabaseClient.isEnabled()) await API.addReport(report);
+        else Storage.addReport(report);
         Components.showModal('Report Submitted', '<p>Thank you for your report. Our moderation team will review it within 24 hours.</p>', '<button class="btn btn-gold" onclick="Components.closeModal()">OK</button>');
       };
     });
@@ -143,16 +187,63 @@ const App = {
     document.querySelectorAll('.join-room-btn').forEach(btn => {
       btn.onclick = () => {
         const roomId = parseInt(btn.dataset.roomId);
-        const room = APP_DATA.voiceRooms.find(r => r.id === roomId);
+        const room = getVoiceRoomById(roomId);
         if (room?.premium && !Auth.isPremium()) {
           Components.showToast('Premium room. Upgrade to join!', 'error');
           return;
         }
         Storage.joinRoom(roomId);
-        Components.showToast('Joined voice room!');
-        Router.navigate();
+        Router.go(`/voice-rooms/${roomId}`);
       };
     });
+
+    document.querySelectorAll('.leave-room-btn').forEach(btn => {
+      btn.onclick = () => {
+        const roomId = parseInt(btn.dataset.roomId);
+        Storage.leaveRoom(roomId);
+        App._stopMic?.();
+        Components.showToast('Left voice room');
+        Router.go('/voice-rooms');
+      };
+    });
+
+    const voiceRoomForm = document.getElementById('voice-room-form');
+    if (voiceRoomForm) {
+      voiceRoomForm.onsubmit = (e) => {
+        e.preventDefault();
+        const input = voiceRoomForm.querySelector('input');
+        const roomId = voiceRoomForm.dataset.roomId;
+        if (!input.value.trim()) return;
+        Storage.addRoomMessage(roomId, input.value.trim());
+        input.value = '';
+        Router.navigate();
+        const msgBox = document.getElementById('voice-room-messages');
+        if (msgBox) msgBox.scrollTop = msgBox.scrollHeight;
+      };
+    }
+
+    const voiceMicBtn = document.getElementById('voice-mic-btn');
+    if (voiceMicBtn) {
+      voiceMicBtn.onclick = async () => {
+        if (voiceMicBtn.classList.contains('active')) {
+          App._stopMic?.();
+          voiceMicBtn.classList.remove('active');
+          Components.showToast('Microphone muted');
+          return;
+        }
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          App._micStream = stream;
+          voiceMicBtn.classList.add('active');
+          Components.showToast('Microphone on — you can speak in the room');
+        } catch {
+          Components.showToast('Microphone access denied. You can still chat by text.', 'error');
+        }
+      };
+    }
+
+    const voiceMsgBox = document.getElementById('voice-room-messages');
+    if (voiceMsgBox) voiceMsgBox.scrollTop = voiceMsgBox.scrollHeight;
 
     const createRoomBtn = document.getElementById('create-room-btn');
     if (createRoomBtn) {
@@ -160,12 +251,26 @@ const App = {
         Components.showModal('Create Voice Room', `
           <form id="create-room-form">
             <div class="form-group"><label>Room Title</label><input type="text" name="title" required></div>
-            <div class="form-group"><label>Description</label><input type="text" name="desc"></div>
+            <div class="form-group"><label>Description</label><input type="text" name="desc" placeholder="Optional topic"></div>
           </form>
         `, '<button class="btn btn-gold" id="submit-room">Create Room</button>');
         document.getElementById('submit-room').onclick = () => {
-          Components.showToast('Voice room created!');
+          const form = document.getElementById('create-room-form');
+          const title = form?.title?.value?.trim();
+          if (!title) return;
+          const user = Auth.getCurrentUser();
+          const room = Storage.addCustomRoom({
+            id: Date.now(),
+            title,
+            host: user.name || 'You',
+            participants: 1,
+            active: true,
+            premium: false,
+            desc: form.desc?.value?.trim() || ''
+          });
           Components.closeModal();
+          Components.showToast('Voice room created!');
+          Router.go(`/voice-rooms/${room.id}`);
         };
       };
     }
@@ -213,6 +318,7 @@ const App = {
       commentForm.onsubmit = (e) => {
         e.preventDefault();
         Components.showToast('Comment posted!');
+        Storage.incrementAnalytics('comments');
         commentForm.querySelector('input').value = '';
       };
     }
@@ -246,11 +352,16 @@ const App = {
     // Auth forms
     const loginForm = document.getElementById('login-form');
     if (loginForm) {
-      loginForm.onsubmit = (e) => {
+      loginForm.onsubmit = async (e) => {
         e.preventDefault();
         const data = new FormData(loginForm);
-        const result = Auth.login(data.get('email'), data.get('password'));
+        const btn = loginForm.querySelector('[type="submit"]');
+        if (btn) { btn.disabled = true; btn.textContent = 'Signing in...'; }
+        const result = await Auth.login(data.get('email'), data.get('password'));
+        if (btn) { btn.disabled = false; btn.textContent = 'Sign In'; }
         if (result.success) {
+          Components.closeModal();
+          await loadRemoteData();
           Components.showToast('Welcome back!');
           Router.go('/');
         } else {
@@ -261,17 +372,32 @@ const App = {
 
     const registerForm = document.getElementById('register-form');
     if (registerForm) {
-      registerForm.onsubmit = (e) => {
+      registerForm.onsubmit = async (e) => {
         e.preventDefault();
         const data = new FormData(registerForm);
         if (data.get('password') !== data.get('confirm')) {
           Components.showToast('Passwords do not match', 'error');
           return;
         }
-        const result = Auth.register(data.get('name'), data.get('email'), data.get('password'));
+        const btn = registerForm.querySelector('[type="submit"]');
+        if (btn) { btn.disabled = true; btn.textContent = 'Creating...'; }
+        const result = await Auth.register(
+          data.get('name'),
+          data.get('email'),
+          data.get('password'),
+          data.get('username')
+        );
+        if (btn) { btn.disabled = false; btn.textContent = 'Create Account'; }
         if (result.success) {
-          Components.showToast('Account created!');
-          Router.go('/');
+          Components.closeModal();
+          if (result.needsConfirmation) {
+            Components.showToast(result.message || 'Check your email to confirm!');
+            Router.go('/login');
+          } else {
+            await loadRemoteData();
+            Components.showToast('Account created!');
+            Router.go('/');
+          }
         } else {
           Components.showToast(result.error, 'error');
         }
@@ -280,31 +406,36 @@ const App = {
 
     const forgotForm = document.getElementById('forgot-form');
     if (forgotForm) {
-      forgotForm.onsubmit = (e) => {
+      forgotForm.onsubmit = async (e) => {
         e.preventDefault();
         const email = new FormData(forgotForm).get('email');
-        Auth.resetPassword(email);
-        Router.go('/check-email');
+        const result = await Auth.resetPassword(email);
+        if (result.success) Router.go('/check-email');
+        else Components.showToast(result.error, 'error');
       };
     }
 
     const resetForm = document.getElementById('reset-form');
     if (resetForm) {
-      resetForm.onsubmit = (e) => {
+      resetForm.onsubmit = async (e) => {
         e.preventDefault();
         const data = new FormData(resetForm);
         if (data.get('password') !== data.get('confirm')) {
           Components.showToast('Passwords do not match', 'error');
           return;
         }
-        Router.go('/reset-success');
+        const result = await Auth.updatePassword(data.get('password'));
+        if (result.success) Router.go('/reset-success');
+        else Components.showToast(result.error || 'Failed to update password', 'error');
       };
     }
 
     // Social login
     document.querySelectorAll('[data-social]').forEach(btn => {
-      btn.onclick = () => {
-        Auth.loginWithSocial(btn.dataset.social);
+      btn.onclick = async () => {
+        const result = await Auth.loginWithOAuth(btn.dataset.social);
+        if (result?.redirecting) return;
+        Components.closeModal();
         Components.showToast('Logged in!');
         Router.go('/');
       };
@@ -323,8 +454,9 @@ const App = {
     // Logout
     const logoutBtn = document.getElementById('logout-btn');
     if (logoutBtn) {
-      logoutBtn.onclick = () => {
-        Auth.logout();
+      logoutBtn.onclick = async () => {
+        await Auth.logout();
+        window.REMOTE_POEMS = [];
         Components.showToast('Logged out');
         Router.go('/login');
       };
@@ -389,28 +521,100 @@ const App = {
       };
     }
 
-    // Hero carousel
-    this.initCarousel();
-  },
+    // Create post button (bottom nav +)
+    const createBtn = document.getElementById('create-post-btn');
+    if (createBtn) createBtn.onclick = () => Write.openModal();
 
-  initCarousel() {
-    const slides = APP_DATA.heroSlides;
-    const heroSlide = document.querySelector('.hero-slide');
-    const dots = document.querySelectorAll('.carousel-dots .dot');
-    if (!heroSlide || !dots.length) return;
+    const dashboardWriteBtn = document.getElementById('dashboard-write-btn');
+    if (dashboardWriteBtn) dashboardWriteBtn.onclick = () => Write.openModal();
 
-    let current = 0;
-    setInterval(() => {
-      current = (current + 1) % slides.length;
-      const slide = slides[current];
-      const poem = getPoemById(slide.poemId);
-      heroSlide.style.backgroundImage = `url('${slide.image}')`;
-      const poemEl = heroSlide.querySelector('.hero-poem');
-      const btn = heroSlide.querySelector('.btn');
-      if (poemEl && poem) poemEl.textContent = poem.text.split('\n')[0];
-      if (btn) btn.href = `#/poem/${slide.poemId}`;
-      dots.forEach((d, i) => d.classList.toggle('active', i === current));
-    }, 5000);
+    const newDraftBtn = document.getElementById('new-draft-btn');
+    if (newDraftBtn) newDraftBtn.onclick = () => Write.openModal();
+
+    document.querySelectorAll('.edit-draft-btn').forEach(btn => {
+      btn.onclick = () => {
+        const draft = Storage.getDrafts().find(d => d.id === parseInt(btn.dataset.draftId));
+        if (draft) Write.openModal(draft);
+      };
+    });
+
+    document.querySelectorAll('.delete-draft-btn').forEach(btn => {
+      btn.onclick = () => {
+        Storage.deleteDraft(parseInt(btn.dataset.draftId));
+        Components.showToast('Draft deleted');
+        Router.navigate();
+      };
+    });
+
+    document.querySelectorAll('.cancel-scheduled-btn').forEach(btn => {
+      btn.onclick = () => {
+        Storage.deleteScheduled(parseInt(btn.dataset.id));
+        Components.showToast('Scheduled post cancelled');
+        Router.navigate();
+      };
+    });
+
+    document.querySelectorAll('.dashboard-theme-btn').forEach(btn => {
+      btn.onclick = () => {
+        Storage.setCardTheme(btn.dataset.theme);
+        Components.showToast('Card theme updated!');
+        Router.navigate();
+      };
+    });
+
+    // Admin panel
+    const saveTagsBtn = document.getElementById('save-tags-btn');
+    if (saveTagsBtn) {
+      saveTagsBtn.onclick = async () => {
+        const rows = document.querySelectorAll('.admin-tag-row');
+        const tags = [];
+        rows.forEach(row => {
+          const id = parseInt(row.querySelector('[data-field="label"]').dataset.tagId);
+          const label = row.querySelector('[data-field="label"]').value.trim();
+          const en = row.querySelector('[data-field="en"]').value.trim();
+          if (label) tags.push({ id, label, en });
+        });
+        if (SupabaseClient.isEnabled()) {
+          await API.saveWritingTags(tags);
+        } else {
+          Storage.saveWritingTags(tags);
+        }
+        Components.showToast('Tags saved!');
+        Router.navigate();
+      };
+    }
+
+    const addTagBtn = document.getElementById('add-tag-btn');
+    if (addTagBtn) {
+      addTagBtn.onclick = () => {
+        const tags = Storage.getWritingTags();
+        tags.push({ id: Date.now(), label: 'نیا', en: 'New' });
+        Storage.saveWritingTags(tags);
+        Router.navigate();
+      };
+    }
+
+    document.querySelectorAll('.delete-tag-btn').forEach(btn => {
+      btn.onclick = () => {
+        const id = parseInt(btn.dataset.tagId);
+        Storage.saveWritingTags(Storage.getWritingTags().filter(t => t.id !== id));
+        Router.navigate();
+      };
+    });
+
+    document.querySelectorAll('.resolve-report-btn').forEach(btn => {
+      btn.onclick = async () => {
+        const id = parseInt(btn.dataset.id);
+        const action = btn.dataset.action;
+        if (SupabaseClient.isEnabled()) {
+          await API.resolveReport(id, action);
+        } else {
+          Storage.resolveReport(id, action);
+        }
+        Components.showToast('Report resolved');
+        Router.navigate();
+      };
+    });
   }
 };
 
