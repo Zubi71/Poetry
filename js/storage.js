@@ -344,20 +344,26 @@ const Storage = {
       email: u.email,
       username: u.username || u.email?.split('@')[0],
       displayName: u.name,
-      isAdmin: Boolean(u.isAdmin),
-      postsCount: (this.getUserPosts().filter(p => p.poetId === u.id)).length
+      userRole: u.userRole || (u.isAdmin ? 'admin' : 'user'),
+      isAdmin: Boolean(u.isAdmin)
     }));
   },
 
-  setLocalUserAdmin(userId, isAdmin) {
+  setLocalUserRole(userId, role) {
+    const isAdmin = role === 'admin';
     const users = this.get('urdu_poetry_users', []);
-    const updated = users.map(u => u.id === userId ? { ...u, isAdmin } : u);
+    const updated = users.map(u => u.id === userId ? { ...u, isAdmin, userRole: role } : u);
     this.set('urdu_poetry_users', updated);
     const current = this.getUser();
     if (current && current.id === userId) {
-      this.setUser({ ...current, isAdmin });
+      this.setUser({ ...current, isAdmin, userRole: role });
     }
     return true;
+  },
+
+  /** @deprecated use setLocalUserRole */
+  setLocalUserAdmin(userId, isAdmin) {
+    return this.setLocalUserRole(userId, isAdmin ? 'admin' : 'user');
   },
 
   getUserPosts() {

@@ -631,7 +631,7 @@ const App = {
 
     if (users === null) {
       container.innerHTML = `
-        <p class="admin-error">Could not load users. Run <code>supabase/admin.sql</code> in Supabase SQL Editor first.</p>
+        <p class="admin-error">Could not load users. Run <code>supabase/migrate-user-role.sql</code> in Supabase SQL Editor first.</p>
       `;
       return;
     }
@@ -647,11 +647,10 @@ const App = {
         <div class="admin-user-info">
           <strong>${u.displayName || u.username || 'User'}</strong>
           <span>${u.email || u.username || ''}</span>
-          <span class="admin-user-meta">${u.postsCount || 0} posts</span>
         </div>
-        <select class="admin-role-select filter-select" data-user-id="${u.id}" ${u.id === currentId ? 'title="You cannot remove your own admin role"' : ''}>
-          <option value="user" ${!u.isAdmin ? 'selected' : ''}>User</option>
-          <option value="admin" ${u.isAdmin ? 'selected' : ''}>Admin</option>
+        <select class="admin-role-select filter-select" data-user-id="${u.id}" aria-label="User role" ${u.id === currentId ? 'title="You cannot remove your own admin role"' : ''}>
+          <option value="user" ${u.userRole !== 'admin' ? 'selected' : ''}>user</option>
+          <option value="admin" ${u.userRole === 'admin' ? 'selected' : ''}>admin</option>
         </select>
       </div>
     `).join('');
@@ -659,10 +658,10 @@ const App = {
     container.querySelectorAll('.admin-role-select').forEach(select => {
       select.addEventListener('change', async () => {
         const userId = select.dataset.userId;
-        const makeAdmin = select.value === 'admin';
+        const role = select.value;
         const currentUser = Auth.getCurrentUser();
 
-        if (userId === currentUser?.id && !makeAdmin) {
+        if (userId === currentUser?.id && role === 'user') {
           Components.showToast('You cannot remove your own admin role', 'error');
           select.value = 'admin';
           return;
@@ -670,15 +669,15 @@ const App = {
 
         let ok = false;
         if (SupabaseClient.isEnabled()) {
-          ok = await API.setUserAdminRole(userId, makeAdmin);
+          ok = await API.setUserRole(userId, role);
         } else {
-          ok = Storage.setLocalUserAdmin(userId, makeAdmin);
+          ok = Storage.setLocalUserRole(userId, role);
         }
 
         if (ok) {
-          Components.showToast(makeAdmin ? 'User promoted to Admin' : 'User set to regular User');
+          Components.showToast(role === 'admin' ? 'Role set to admin' : 'Role set to user');
         } else {
-          Components.showToast('Failed to update role', 'error');
+          Components.showToast('Failed to update role. Run supabase/migrate-user-role.sql first.', 'error');
           this.loadAdminUsers();
         }
       });

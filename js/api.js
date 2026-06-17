@@ -31,7 +31,7 @@ const API = {
       email: authUser?.email,
       avatar: row?.avatar_url || getAvatarUrl(name),
       premium: row?.is_premium || false,
-      isAdmin: row?.is_admin || false,
+      isAdmin: row?.user_role === 'admin',
       bio: row?.bio || '',
       loggedIn: true,
       isGuest: false
@@ -118,23 +118,28 @@ const API = {
       email: u.email,
       username: u.username,
       displayName: u.display_name,
-      isAdmin: u.is_admin,
-      postsCount: u.posts_count || 0
+      userRole: u.user_role || 'user',
+      isAdmin: u.user_role === 'admin'
     }));
   },
 
-  async setUserAdminRole(userId, isAdmin) {
+  async setUserRole(userId, role) {
     const sb = SupabaseClient.get();
     if (!sb || !Auth.isAdmin()) return false;
-    const { error } = await sb.rpc('set_user_admin', {
+    const { error } = await sb.rpc('set_user_role', {
       target_user_id: userId,
-      make_admin: isAdmin
+      new_role: role
     });
     if (error) {
-      console.warn('setUserAdminRole:', error.message);
+      console.warn('setUserRole:', error.message);
       return false;
     }
     return true;
+  },
+
+  /** @deprecated use setUserRole */
+  async setUserAdminRole(userId, isAdmin) {
+    return this.setUserRole(userId, isAdmin ? 'admin' : 'user');
   },
 
   async getFeaturedPoemId() {

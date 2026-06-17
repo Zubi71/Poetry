@@ -1027,7 +1027,7 @@ const Pages = {
 
         <section class="admin-section">
           <h2>User Roles</h2>
-          <p class="section-desc">Assign <strong>Admin</strong> or <strong>User</strong> from the dropdown — updates the database instantly</p>
+          <p class="section-desc">Assign role from dropdown — <strong>user</strong> or <strong>admin</strong> (saved to database)</p>
           <div id="admin-users-list" class="admin-users-list">
             <p class="admin-loading">Loading users…</p>
           </div>

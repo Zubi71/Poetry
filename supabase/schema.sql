@@ -4,17 +4,20 @@
 -- ============================================================
 
 -- Profiles (extends auth.users)
+DO $$ BEGIN
+  CREATE TYPE public.user_role AS ENUM ('user', 'admin');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+
 CREATE TABLE IF NOT EXISTS public.profiles (
   id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   username TEXT UNIQUE,
   display_name TEXT,
   avatar_url TEXT,
   bio TEXT DEFAULT '',
+  user_role public.user_role NOT NULL DEFAULT 'user',
   is_premium BOOLEAN DEFAULT FALSE,
-  is_admin BOOLEAN DEFAULT FALSE,
-  followers_count INT DEFAULT 0,
-  following_count INT DEFAULT 0,
-  posts_count INT DEFAULT 0,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -254,22 +257,22 @@ CREATE POLICY "Users manage own scheduled" ON public.scheduled_posts FOR ALL USI
 -- Reports
 CREATE POLICY "Users can submit reports" ON public.reports FOR INSERT WITH CHECK (auth.uid() = reporter_id);
 CREATE POLICY "Admins view all reports" ON public.reports FOR SELECT USING (
-  EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND is_admin = true)
+  EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND user_role = 'admin')
 );
 CREATE POLICY "Admins update reports" ON public.reports FOR UPDATE USING (
-  EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND is_admin = true)
+  EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND user_role = 'admin')
 );
 
 -- Writing tags
 CREATE POLICY "Tags viewable by everyone" ON public.writing_tags FOR SELECT USING (is_active = true);
 CREATE POLICY "Admins manage tags" ON public.writing_tags FOR ALL USING (
-  EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND is_admin = true)
+  EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND user_role = 'admin')
 );
 
 -- Featured
 CREATE POLICY "Featured viewable by everyone" ON public.featured_poem FOR SELECT USING (true);
 CREATE POLICY "Admins manage featured" ON public.featured_poem FOR ALL USING (
-  EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND is_admin = true)
+  EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND user_role = 'admin')
 );
 
 -- Reading history
