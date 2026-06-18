@@ -16,7 +16,13 @@ const SupabaseClient = {
       this.ready = false;
       return null;
     }
-    this.client = supabase.createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey);
+    this.client = supabase.createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey, {
+      auth: {
+        flowType: 'pkce',
+        detectSessionInUrl: true,
+        persistSession: true
+      }
+    });
     this.ready = true;
     return this.client;
   },

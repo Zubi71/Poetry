@@ -28,6 +28,34 @@ const Auth = {
     return user && (user.isAdmin || user.email === 'admin@urdupoetry.com');
   },
 
+  ensureGuestBrowsing() {
+    if (this.isLoggedIn()) return;
+    this.loginAsGuest();
+  },
+
+  getGuestReadsRemaining() {
+    return Math.max(0, APP_DATA.guestPoemLimit - Storage.getGuestReads());
+  },
+
+  tryAccessPoem(poemId) {
+    const pid = parseInt(poemId);
+    if (!this.isGuest()) {
+      this.recordPoemRead(pid);
+      return true;
+    }
+    if (Storage.getHistory().includes(pid)) {
+      this.recordPoemRead(pid);
+      return true;
+    }
+    const check = this.canReadPoem();
+    if (!check.allowed) {
+      Components.showGuestLimitModal();
+      return false;
+    }
+    this.recordPoemRead(pid);
+    return true;
+  },
+
   getCurrentUser() {
     const user = Storage.getUser();
     if (user && !user.isGuest) {
@@ -58,6 +86,7 @@ const Auth = {
       } else if (event === 'SIGNED_OUT') {
         this._session = null;
         Storage.clearUser();
+        this.loginAsGuest();
       }
       if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
         Router.navigate();
@@ -193,10 +222,13 @@ const Auth = {
   async loginWithOAuth(provider) {
     if (this.isSupabase()) {
       const sb = SupabaseClient.get();
-      const redirectTo = window.location.origin + window.location.pathname;
+      const redirectTo = `${window.location.origin}${window.location.pathname}`;
       const { error } = await sb.auth.signInWithOAuth({
         provider,
-        options: { redirectTo }
+        options: {
+          redirectTo,
+          queryParams: provider === 'google' ? { prompt: 'select_account' } : undefined
+        }
       });
       if (error) {
         Components.showToast(error.message, 'error');
@@ -282,8 +314,13 @@ const Auth = {
   },
 
   recordPoemRead(poemId) {
-    Storage.addToHistory(poemId);
-    if (this.isGuest()) return Storage.incrementGuestReads();
+    const pid = parseInt(poemId);
+    const isNew = !Storage.getHistory().includes(pid);
+    Storage.addToHistory(pid);
+    if (this.isGuest()) {
+      if (isNew) Storage.incrementGuestReads();
+      return Storage.getGuestReads();
+    }
     if (!this.isPremium()) return Storage.incrementDailyReads();
     return 0;
   },

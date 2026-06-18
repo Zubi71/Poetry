@@ -21,6 +21,8 @@ const App = {
       await loadRemoteData();
     }
 
+    Auth.ensureGuestBrowsing();
+
     Router.init();
     this.bindGlobalEvents();
   },
@@ -35,6 +37,14 @@ const App = {
       if (e.target.closest('.open-write-btn')) {
         e.preventDefault();
         Write.openModal();
+      }
+
+      const poemLink = e.target.closest('a[href*="#/poem/"]');
+      if (poemLink && Auth.isGuest()) {
+        const match = poemLink.getAttribute('href')?.match(/\/poem\/(\d+)/);
+        if (match && !Auth.tryAccessPoem(match[1])) {
+          e.preventDefault();
+        }
       }
     });
   },
@@ -430,12 +440,13 @@ const App = {
       };
     }
 
-    // Social login
+    // Social login (auth pages + guest limit modal)
     document.querySelectorAll('[data-social]').forEach(btn => {
       btn.onclick = async () => {
         const result = await Auth.loginWithOAuth(btn.dataset.social);
         if (result?.redirecting) return;
         Components.closeModal();
+        await loadRemoteData();
         Components.showToast('Logged in!');
         Router.go('/');
       };
@@ -457,8 +468,9 @@ const App = {
       logoutBtn.onclick = async () => {
         await Auth.logout();
         window.REMOTE_POEMS = [];
-        Components.showToast('Logged out');
-        Router.go('/login');
+        Auth.loginAsGuest();
+        Components.showToast('Logged out — browsing as guest');
+        Router.go('/');
       };
     }
 

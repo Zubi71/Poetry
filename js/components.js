@@ -368,32 +368,69 @@ const Components = {
     }, 3000);
   },
 
+  renderGuestBanner() {
+    if (!Auth.isGuest()) return '';
+    const remaining = Auth.getGuestReadsRemaining();
+    const limit = APP_DATA.guestPoemLimit;
+    if (remaining <= 0) {
+      return `
+        <div class="guest-read-banner guest-read-banner-limit">
+          <p><strong>Free reading limit reached.</strong> Register or sign in to continue.</p>
+          <p class="urdu-text">${APP_DATA.guestLimitUrdu}</p>
+          <div class="guest-read-banner-actions">
+            <a href="#/register" class="btn btn-gold btn-sm">Create Account</a>
+            <a href="#/login" class="btn btn-outline-gold btn-sm">Sign In</a>
+          </div>
+        </div>
+      `;
+    }
+    const warn = remaining <= 3;
+    return `
+      <div class="guest-read-banner ${warn ? 'guest-read-banner-warn' : ''}">
+        <p>Reading as guest — <strong>${remaining}</strong> of ${limit} free poems left</p>
+        <a href="#/register" class="btn btn-outline-gold btn-sm">Register free</a>
+      </div>
+    `;
+  },
+
   showGuestLimitModal() {
     const root = document.getElementById('modal-root');
+    if (document.getElementById('guest-limit-modal')) return;
     this.openModalLock();
     root.innerHTML = `
       <div class="modal-overlay active" id="guest-limit-modal">
-        <div class="modal guest-limit-modal">
-          <div class="modal-icon">📚</div>
-          <h2>You've reached the limit!</h2>
-          <p>You can read up to ${APP_DATA.guestPoemLimit} poems as a guest. Register or login to continue reading.</p>
-          <p class="urdu-text modal-urdu">${APP_DATA.guestLimitUrdu}</p>
-          <div class="modal-actions">
-            <a href="#/login" class="btn btn-gold" id="guest-limit-login">Login / Register</a>
-            <button class="btn btn-ghost" id="guest-limit-close">Continue Browsing</button>
+        <div class="modal guest-limit-modal auth-style-modal">
+          <img src="${APP_DATA.logo}" alt="" class="auth-logo-sm">
+          <h2>Want to read more poems?</h2>
+          <p>${APP_DATA.guestLimitPromptEn}</p>
+          <p class="urdu-text modal-urdu">${APP_DATA.guestLimitPromptUrdu}</p>
+          <p class="guest-limit-note">You have read ${APP_DATA.guestPoemLimit} poems as a guest.</p>
+          <div class="modal-actions guest-limit-actions">
+            <a href="#/register" class="btn btn-gold" id="guest-limit-register">Create Account</a>
+            <a href="#/login" class="btn btn-outline-gold" id="guest-limit-login">Sign In</a>
           </div>
+          <div class="social-divider">or continue with</div>
+          <div class="social-buttons">
+            <button type="button" class="btn btn-social" data-social="google">Continue with Google</button>
+            <button type="button" class="btn btn-social" data-social="facebook">Continue with Facebook</button>
+          </div>
+          <button type="button" class="btn btn-ghost btn-block" id="guest-limit-close">Continue Browsing</button>
         </div>
       </div>
     `;
-    document.getElementById('guest-limit-close').addEventListener('click', () => {
-      this.closeModal();
+    document.getElementById('guest-limit-close').addEventListener('click', () => this.closeModal());
+    ['guest-limit-register', 'guest-limit-login'].forEach(id => {
+      document.getElementById(id)?.addEventListener('click', () => this.closeModal());
     });
-    const loginLink = document.getElementById('guest-limit-login');
-    if (loginLink) {
-      loginLink.addEventListener('click', () => {
-        this.closeModal();
+    root.querySelectorAll('[data-social]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const result = await Auth.loginWithOAuth(btn.dataset.social);
+        if (result?.redirecting) this.closeModal();
       });
-    }
+    });
+    root.querySelector('.modal-overlay')?.addEventListener('click', (e) => {
+      if (e.target.classList.contains('modal-overlay')) this.closeModal();
+    });
   },
 
   showModal(title, content, actions = '') {

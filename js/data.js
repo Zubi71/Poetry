@@ -1,7 +1,9 @@
 const APP_DATA = {
   logo: 'https://i.postimg.cc/d3TKbsF1/file-000000004fb871faa5cf0097ec3fc2bc.png',
   guestLimitUrdu: 'آپ نے مفت پڑھنے کی حد مکمل کر لی ہے۔ مزید شاعری پڑھنے کے لیے براہ کرم رجسٹر کریں یا لاگ ان کریں۔',
-  guestPoemLimit: 30,
+  guestPoemLimit: 10,
+  guestLimitPromptUrdu: 'مزید شاعری پڑھنے کے لیے رجسٹر کریں یا لاگ ان کریں۔',
+  guestLimitPromptEn: 'Want to read more poems? Create a free account or sign in.',
   freeLimits: {
     messages: 1000,
     bookmarks: 100,

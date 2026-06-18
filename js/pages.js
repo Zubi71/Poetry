@@ -12,6 +12,7 @@ const Pages = {
     } else poems = allPoems.slice(0, 10);
 
     const content = `
+      ${Components.renderGuestBanner()}
       <div class="feed-tabs">
         <a href="#/?tab=foryou" class="feed-tab ${tab === 'foryou' ? 'active' : ''}">For You</a>
         <a href="#/?tab=trending" class="feed-tab ${tab === 'trending' ? 'active' : ''}">Trending</a>
@@ -194,11 +195,20 @@ const Pages = {
     const poem = getPoemById(params.id);
     if (!poem) return Components.renderAppLayout('<p class="empty-state">Poem not found.</p>');
 
-    const canRead = Auth.canReadPoem();
-    if (!canRead.allowed) {
-      Components.showGuestLimitModal();
-    } else {
-      Auth.recordPoemRead(poem.id);
+    if (!Auth.tryAccessPoem(poem.id)) {
+      return Components.renderAppLayout(`
+        ${Components.renderGuestBanner()}
+        <div class="poem-detail poem-locked">
+          <a href="#/" class="back-link">${Components.icon('back')} Back to Home</a>
+          <div class="empty-state">
+            <h2>Register to read more</h2>
+            <p class="urdu-text">${APP_DATA.guestLimitPromptUrdu}</p>
+            <p>${APP_DATA.guestLimitPromptEn}</p>
+            <a href="#/register" class="btn btn-gold">Create Free Account</a>
+            <a href="#/login" class="btn btn-outline-gold">Sign In</a>
+          </div>
+        </div>
+      `);
     }
 
     const poet = getPoetById(poem.poetId);
@@ -766,7 +776,7 @@ const Pages = {
             <button class="btn btn-social" data-social="facebook">Continue with Facebook</button>
           </div>
           <a href="#/register" class="auth-switch">Don't have an account? Sign Up</a>
-          <a href="#/" class="guest-link" id="guest-login">Login as Guest</a>
+          <a href="#/" class="guest-link" id="guest-login">Continue browsing as guest</a>
           <p class="auth-footer-urdu urdu-text">شاعری دلوں کی زبان ہے</p>
           <p class="auth-footer">Poetry is the language of hearts.</p>
         </div>
@@ -824,6 +834,7 @@ const Pages = {
             <button class="btn btn-social" data-social="facebook">Continue with Facebook</button>
           </div>
           <a href="#/login" class="auth-switch">Already have an account? Sign In</a>
+          <a href="#/" class="guest-link" id="guest-login">Continue browsing as guest</a>
         </div>
       </div>
     `;
