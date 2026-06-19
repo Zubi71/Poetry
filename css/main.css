@@ -529,6 +529,34 @@ input:focus, select:focus, textarea:focus {
   transition: border-color var(--transition);
 }
 
+.poem-card-v2 {
+  position: relative;
+  border: 1px solid rgba(212, 175, 55, 0.45);
+  border-radius: 16px;
+  padding: 20px 18px 0;
+  background: linear-gradient(145deg, #141414 0%, #0a0a0a 100%);
+  overflow: hidden;
+}
+
+.poem-card-v2::after {
+  content: '🪶';
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 64px;
+  opacity: 0.06;
+  pointer-events: none;
+}
+
+.poem-card-v2:hover { border-color: rgba(212, 175, 55, 0.65); }
+
+.content-card-v2 {
+  border: 1px solid rgba(212, 175, 55, 0.35);
+  border-radius: 16px;
+  background: linear-gradient(145deg, #141414, #0a0a0a);
+}
+
 .poem-card:hover { border-color: rgba(212,175,55,0.3); }
 
 .poem-card-header {
@@ -546,8 +574,24 @@ input:focus, select:focus, textarea:focus {
 }
 
 .poet-info img { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
+
+.poet-avatar-gold {
+  width: 44px !important;
+  height: 44px !important;
+  border: 2px solid var(--gold) !important;
+  box-shadow: 0 0 0 2px rgba(212, 175, 55, 0.15);
+}
+
 .poet-name { display: block; font-weight: 600; font-size: 14px; }
-.post-time { font-size: 12px; color: var(--text-muted); }
+.post-time {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.post-time .time-icon svg { width: 12px; height: 12px; opacity: 0.7; }
 
 .category-badge {
   padding: 4px 12px;
@@ -587,12 +631,46 @@ input:focus, select:focus, textarea:focus {
 .poem-line {
   display: block;
   white-space: nowrap;
-  font-size: clamp(20px, 3.5vw, 28px);
-  line-height: 1.9;
-  padding: 6px 20px;
+  font-size: clamp(18px, 3.2vw, 26px);
+  line-height: 2;
+  padding: 4px 12px;
   text-align: center;
   max-width: 100%;
   overflow: visible;
+  color: var(--text-primary);
+}
+
+.poem-theme-golden .poem-line,
+.poem-theme-classic-dark .poem-line,
+.poem-theme-golden-border .poem-line,
+.poem-theme-premium-paper .poem-line {
+  border-bottom: none;
+}
+
+.poem-verse-divider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 4px 0;
+}
+
+.poem-verse-divider::before,
+.poem-verse-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(212, 175, 55, 0.5), transparent);
+}
+
+.poem-verse-divider span {
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 6px solid var(--gold);
+  margin: 0 8px;
+  opacity: 0.8;
 }
 
 .poem-theme-classic-dark {
@@ -659,6 +737,49 @@ input:focus, select:focus, textarea:focus {
   border-top: 1px solid var(--border);
   padding-top: 12px;
 }
+
+.poem-actions-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  flex-wrap: nowrap;
+  gap: 0;
+  margin: 16px -18px 0;
+  padding: 12px 8px;
+  border-top: 1px solid rgba(212, 175, 55, 0.2);
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 0 0 16px 16px;
+}
+
+.poem-actions-bar .action-btn {
+  flex: 1;
+  justify-content: center;
+  padding: 8px 4px;
+  font-size: 12px;
+  border: none;
+  background: transparent;
+}
+
+.poem-actions-bar .like-btn.active {
+  background: rgba(212, 175, 55, 0.12);
+  border-radius: 20px;
+  color: var(--gold);
+}
+
+.poem-actions-bar .like-btn.active svg {
+  fill: #ef4444;
+  stroke: #ef4444;
+}
+
+.action-divider {
+  width: 1px;
+  height: 24px;
+  background: rgba(212, 175, 55, 0.2);
+  flex-shrink: 0;
+}
+
+.poem-actions-bar .action-btn svg { width: 16px; height: 16px; }
+.poem-actions-bar .action-btn span { font-size: 12px; }
 
 .action-btn {
   display: flex;
@@ -1404,6 +1525,134 @@ input:focus, select:focus, textarea:focus {
 .auth-features {
   display: none;
 }
+
+/* Modern auth (screenshot style, gold theme) */
+.auth-modern .auth-container { max-width: 420px; }
+
+.auth-modern-card {
+  text-align: left;
+  padding: 32px 28px 28px;
+  border-radius: 20px;
+  border: 1px solid rgba(212, 175, 55, 0.2);
+  background: linear-gradient(160deg, #1a1a1a 0%, #0f0f0f 100%);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.auth-back {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-secondary);
+  margin-bottom: 20px;
+  padding: 4px;
+}
+
+.auth-back:hover { color: var(--gold); }
+.auth-back svg { width: 22px; height: 22px; }
+
+.auth-welcome {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-primary);
+  margin-bottom: 10px;
+}
+
+.auth-subtitle {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-muted);
+  margin-bottom: 24px;
+}
+
+.auth-form-modern {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.auth-form-modern input[type="text"],
+.auth-form-modern input[type="email"],
+.auth-form-modern input[type="password"] {
+  width: 100%;
+  padding: 14px 16px;
+  background: #0a0a0a;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.auth-form-modern input:focus {
+  border-color: rgba(212, 175, 55, 0.5);
+  outline: none;
+}
+
+.password-field {
+  position: relative;
+}
+
+.password-field input { padding-right: 48px !important; }
+
+.password-toggle {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  padding: 4px;
+  display: flex;
+}
+
+.password-toggle svg { width: 18px; height: 18px; }
+.password-toggle:hover { color: var(--gold); }
+
+.forgot-link-right {
+  display: block;
+  text-align: right;
+  font-size: 13px;
+  color: var(--gold);
+  margin-top: -6px;
+}
+
+.auth-submit {
+  margin-top: 8px;
+  padding: 14px;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.auth-switch {
+  text-align: center;
+  margin-top: 20px;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.auth-switch a { color: var(--gold); font-weight: 600; }
+
+.social-icon-row {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin: 16px 0 8px;
+}
+
+.social-icon-btn {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: #0a0a0a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.2s;
+}
+
+.social-icon-btn:hover { border-color: var(--gold); }
+.social-icon-btn svg { width: 22px; height: 22px; }
+.social-icon-btn[data-social="apple"] svg { color: #fff; }
 
 /* ===== Ads ===== */
 .ad-banner {

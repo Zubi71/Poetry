@@ -117,9 +117,9 @@ const APP_DATA = {
   ],
 
   ads: [
-    { id: 1, type: 'header', title: 'Learn Urdu Calligraphy', image: getPlaceholderImage(728, 90, 'Learn Urdu Calligraphy'), link: '#/premium' },
-    { id: 2, type: 'sidebar', title: 'Poetry Books Collection', image: getPlaceholderImage(300, 250, 'Poetry Books'), link: '#/premium' },
-    { id: 3, type: 'feed', title: 'Upgrade to Premium', image: getPlaceholderImage(600, 200, 'Upgrade to Premium'), link: '#/premium' }
+    { id: 1, type: 'header', title: 'Learn Urdu Calligraphy', image: getPlaceholderImage(728, 90, 'Learn Urdu Calligraphy'), link: '#/poems' },
+    { id: 2, type: 'sidebar', title: 'Poetry Books Collection', image: getPlaceholderImage(300, 250, 'Poetry Books'), link: '#/categories' },
+    { id: 3, type: 'feed', title: 'Discover Poetry', image: getPlaceholderImage(600, 200, 'Discover Poetry'), link: '#/poems' }
   ],
 
   sampleComments: [

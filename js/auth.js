@@ -19,8 +19,7 @@ const Auth = {
   },
 
   isPremium() {
-    const user = this.getCurrentUser();
-    return user && user.premium;
+    return true;
   },
 
   isAdmin() {
@@ -298,17 +297,12 @@ const Auth = {
   },
 
   canReadPoem() {
-    if (this.isPremium()) return { allowed: true };
     if (this.isGuest()) {
       const reads = Storage.getGuestReads();
       if (reads >= APP_DATA.guestPoemLimit) {
         return { allowed: false, reason: 'guest_limit' };
       }
       return { allowed: true };
-    }
-    const daily = Storage.getDailyReads();
-    if (daily.count >= APP_DATA.freeLimits.poemsPerDay) {
-      return { allowed: false, reason: 'daily_limit' };
     }
     return { allowed: true };
   },
@@ -325,24 +319,12 @@ const Auth = {
     return 0;
   },
 
-  canBookmark() {
-    if (this.isPremium()) return true;
-    return Storage.getBookmarks().length < APP_DATA.freeLimits.bookmarks;
-  },
-
-  canMessage() {
-    if (this.isPremium()) return true;
-    return Storage.getMessages().length + APP_DATA.sampleChats.length < APP_DATA.freeLimits.messages;
-  },
-
-  canVisitProfile() {
-    if (this.isPremium()) return true;
-    return Storage.getProfileVisits() < APP_DATA.freeLimits.profileVisits;
-  },
-
-  canCreateEvent() { return this.isPremium(); },
-  canCreateRoom() { return this.isPremium(); },
-  showAds() { return !this.isPremium(); },
+  canBookmark() { return true; },
+  canMessage() { return true; },
+  canVisitProfile() { return true; },
+  canCreateEvent() { return true; },
+  canCreateRoom() { return true; },
+  showAds() { return false; },
 
   getResetEmail() {
     return Storage.get('urdu_poetry_reset_email', 'user@example.com');

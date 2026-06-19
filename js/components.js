@@ -19,6 +19,9 @@ const Components = {
       comment: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>',
       share: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>',
       back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>',
+      clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
+      eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
+      eyeOff: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>',
       plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>',
       menu: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>',
       crown: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M2 19h20v2H2v-2zm2-8l3.5 4.5L12 8l4.5 7.5L20 11l2 8H2l2-8z"/></svg>',
@@ -74,7 +77,6 @@ const Components = {
           <input type="search" id="global-search" placeholder="Search poems, poets, topics..." aria-label="Search">
         </div>
         <div class="header-actions">
-          ${!Auth.isPremium() ? `<a href="#/premium" class="btn btn-outline-gold btn-sm">Upgrade to Premium</a>` : `<span class="premium-badge">👑 Premium</span>`}
           <a href="#/notifications" class="icon-btn notification-btn" aria-label="Notifications">
             ${this.icon('bell')}
             ${unread > 0 ? `<span class="badge-count">${unread}</span>` : ''}
@@ -109,12 +111,6 @@ const Components = {
             </a>
           `).join('')}
         </nav>
-        ${!Auth.isPremium() ? `
-          <div class="sidebar-premium-card">
-            <p>Upgrade to Premium</p>
-            <a href="#/premium" class="btn btn-gold btn-sm">Go Premium</a>
-          </div>
-        ` : ''}
       </aside>
       <div class="sidebar-overlay" id="sidebar-overlay"></div>
     `;
@@ -218,32 +214,36 @@ const Components = {
     const bookmarked = Storage.isBookmarked(poem.id);
     const theme = poem.cardTheme || 'classic-dark';
     const tagLabel = poem.tagLabel || (category ? category.name : poem.category);
+    const likeCount = this.formatNumber(poem.likes + (liked ? 1 : 0));
     return `
-      <article class="poem-card poem-card-${theme}" data-poem-id="${poem.id}">
+      <article class="poem-card poem-card-v2 poem-card-${theme}" data-poem-id="${poem.id}">
         <div class="poem-card-header">
           <a href="${poet ? `#/poet/${poem.poetId}` : '#/dashboard'}" class="poet-info">
-            ${avatarImg(poem.poetName, '', poem.poetName)}
+            ${avatarImg(poem.poetName, 'poet-avatar-gold', poem.poetName)}
             <div>
               <span class="poet-name">${poem.poetName}</span>
-              <span class="post-time">${poem.time}</span>
+              <span class="post-time"><span class="time-icon">${this.icon('clock')}</span> ${poem.time}</span>
             </div>
           </a>
-          <span class="category-badge" style="background:${category ? category.color : '#D4AF37'}">${tagLabel}</span>
+          <span class="category-badge" style="background:${category ? category.color : '#8B5CF6'}">${tagLabel}</span>
         </div>
         <a href="#/poem/${poem.id}" class="poem-content">
           ${formatPoemHtml(poem.text, theme)}
         </a>
         ${showActions ? `
-          <div class="poem-actions">
+          <div class="poem-actions poem-actions-bar">
             <button class="action-btn like-btn ${liked ? 'active' : ''}" data-action="like" data-id="${poem.id}">
-              ${this.icon('heart')} <span>${this.formatNumber(poem.likes + (liked ? 1 : 0))}</span>
+              ${this.icon('heart')} <span>${likeCount}</span>
             </button>
-            <a href="#/poem/${poem.id}" class="action-btn">
+            <span class="action-divider"></span>
+            <a href="#/poem/${poem.id}" class="action-btn comment-btn">
               ${this.icon('comment')} <span>${poem.comments}</span>
             </a>
+            <span class="action-divider"></span>
             <button class="action-btn share-btn" data-action="share" data-id="${poem.id}">
               ${this.icon('share')} <span>Share</span>
             </button>
+            <span class="action-divider"></span>
             <button class="action-btn bookmark-btn ${bookmarked ? 'active' : ''}" data-action="bookmark" data-id="${poem.id}">
               ${this.icon('bookmarks')} <span>${bookmarked ? 'Saved' : 'Save'}</span>
             </button>
@@ -254,34 +254,22 @@ const Components = {
   },
 
   renderPremiumSection() {
-    if (Auth.isPremium()) return '';
+    return '';
+  },
+
+  renderSocialAuthIcons() {
     return `
-      <section class="premium-section">
-        <div class="premium-section-inner">
-          <div class="premium-benefits">
-            <h2>Upgrade to Premium</h2>
-            <ul>
-              ${APP_DATA.premiumFeatures.slice(0, 6).map(f => `
-                <li><span>${f.icon}</span> ${f.title}</li>
-              `).join('')}
-            </ul>
-          </div>
-          <div class="premium-plans">
-            ${APP_DATA.premiumPlans.map(plan => `
-              <div class="plan-card ${plan.badge ? 'featured' : ''}">
-                ${plan.badge ? `<span class="plan-badge">${plan.badge}</span>` : ''}
-                <h3>${plan.name}</h3>
-                <div class="plan-price">${plan.price}<span>${plan.period}</span></div>
-                <p class="plan-note">${plan.note}</p>
-                <a href="#/premium" class="btn btn-gold">Start ${plan.id === 'yearly' ? 'Yearly' : 'Monthly'}</a>
-              </div>
-            `).join('')}
-          </div>
-        </div>
-        <div class="payment-methods">
-          <span>Visa</span><span>Mastercard</span><span>PayPal</span><span>Apple Pay</span><span>Google Pay</span>
-        </div>
-      </section>
+      <div class="social-icon-row">
+        <button type="button" class="social-icon-btn" data-social="google" aria-label="Continue with Google">
+          <svg viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+        </button>
+        <button type="button" class="social-icon-btn" data-social="apple" aria-label="Continue with Apple">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.4C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/></svg>
+        </button>
+        <button type="button" class="social-icon-btn" data-social="facebook" aria-label="Continue with Facebook">
+          <svg viewBox="0 0 24 24" fill="#1877F2"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+        </button>
+      </div>
     `;
   },
 
@@ -348,7 +336,7 @@ const Components = {
           <main class="main-content" id="main-content">${content}</main>
           ${noSidebar || fullWidth ? '' : this.renderRightSidebar()}
         </div>
-        ${options.showPremium !== false ? this.renderPremiumSection() : ''}
+        ${options.showPremium !== false ? '' : ''}
         ${this.renderFooter()}
         ${this.renderBottomNav()}
       </div>
@@ -409,11 +397,8 @@ const Components = {
             <a href="#/register" class="btn btn-gold" id="guest-limit-register">Create Account</a>
             <a href="#/login" class="btn btn-outline-gold" id="guest-limit-login">Sign In</a>
           </div>
-          <div class="social-divider">or continue with</div>
-          <div class="social-buttons">
-            <button type="button" class="btn btn-social" data-social="google">Continue with Google</button>
-            <button type="button" class="btn btn-social" data-social="facebook">Continue with Facebook</button>
-          </div>
+          <div class="social-divider">Or continue with</div>
+          ${this.renderSocialAuthIcons()}
           <button type="button" class="btn btn-ghost btn-block" id="guest-limit-close">Continue Browsing</button>
         </div>
       </div>

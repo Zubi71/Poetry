@@ -124,7 +124,7 @@ const Pages = {
             <div class="poet-card">
               <a href="#/poet/${poet.id}">
                 ${avatarImg(poet.name, '', poet.name)}
-                <h3>${poet.name} ${poet.verified ? '✓' : ''} ${poet.premium ? '👑' : ''}</h3>
+                <h3>${poet.name} ${poet.verified ? '✓' : ''}</h3>
                 <p>${poet.bio}</p>
                 <span class="follower-count">${Components.formatNumber(poet.followers)} followers</span>
               </a>
@@ -143,10 +143,8 @@ const Pages = {
     const poet = getPoetById(params.id);
     if (!poet) return Components.renderAppLayout('<p class="empty-state">Poet not found.</p>');
 
-    if (!Auth.canVisitProfile() && Auth.isGuest()) {
+    if (Auth.isGuest() && !Auth.canVisitProfile()) {
       Components.showGuestLimitModal();
-    } else if (!Auth.isPremium()) {
-      Storage.incrementProfileVisits();
     }
 
     const tab = new URLSearchParams(location.hash.split('?')[1] || '').get('tab') || 'posts';
@@ -165,7 +163,7 @@ const Pages = {
         <div class="profile-header">
           ${avatarImg(poet.name, 'profile-avatar', poet.name)}
           <div class="profile-info">
-            <h1>${poet.name} ${poet.verified ? '<span class="verified-badge">✓</span>' : ''} ${poet.premium ? '<span class="premium-badge">👑</span>' : ''}</h1>
+            <h1>${poet.name} ${poet.verified ? '<span class="verified-badge">✓</span>' : ''}</h1>
             <p>${poet.bio}</p>
             <div class="profile-stats">
               <span><strong>${poet.posts}</strong> Posts</span>
@@ -234,16 +232,20 @@ const Pages = {
           ${formatPoemHtml(poem.text, poem.cardTheme)}
           ${poem.english ? `<p class="english-text">${poem.english}</p>` : ''}
         </div>
-        <div class="poem-actions">
+        <div class="poem-actions poem-actions-bar">
           <button class="action-btn like-btn ${liked ? 'active' : ''}" data-action="like" data-id="${poem.id}">
             ${Components.icon('heart')} <span>${Components.formatNumber(poem.likes + (liked ? 1 : 0))}</span>
           </button>
+          <span class="action-divider"></span>
           <span class="action-btn">${Components.icon('comment')} <span>${poem.comments}</span></span>
+          <span class="action-divider"></span>
           <button class="action-btn share-btn" data-action="share" data-id="${poem.id}">${Components.icon('share')} Share</button>
+          <span class="action-divider"></span>
           <button class="action-btn bookmark-btn ${bookmarked ? 'active' : ''}" data-action="bookmark" data-id="${poem.id}">
             ${Components.icon('bookmarks')} ${bookmarked ? 'Saved' : 'Save'}
           </button>
-          ${Auth.isPremium() ? `<button class="action-btn download-btn" data-action="download" data-id="${poem.id}">⬇️ Download</button>` : ''}
+          <span class="action-divider"></span>
+          <button class="action-btn download-btn" data-action="download" data-id="${poem.id}">⬇️ Download</button>
           <button class="action-btn report-btn" data-type="post" data-id="${poem.id}">🚩 Report</button>
         </div>
         <section class="comments-section">
@@ -318,13 +320,13 @@ const Pages = {
       <div class="page-header">
         <h1>Mushaira Events</h1>
         <p>Join live poetry gatherings and upcoming mushairas</p>
-        ${Auth.canCreateEvent() ? '<a href="#/mushaira/create" class="btn btn-gold">Create Event</a>' : '<a href="#/premium" class="btn btn-outline-gold">Premium: Create Events</a>'}
+        <a href="#/mushaira/create" class="btn btn-gold">Create Event</a>
       </div>
       ${liveEvents.length ? `
         <section class="events-section">
           <h2><span class="live-badge">Live</span> Live Now</h2>
           ${liveEvents.map(event => `
-            <div class="event-card live">
+            <div class="event-card content-card-v2 live">
               <div class="event-info">
                 <h3>${event.title}</h3>
                 <p>Host: ${event.host}</p>
@@ -339,7 +341,7 @@ const Pages = {
       <section class="events-section">
         <h2>Upcoming Events</h2>
         ${upcoming.map(event => `
-          <div class="event-card">
+          <div class="event-card content-card-v2">
             <div class="event-info">
               <h3>${event.title}</h3>
               <p>Host: ${event.host}</p>
@@ -363,17 +365,6 @@ const Pages = {
       if (!room) {
         return Components.renderAppLayout('<div class="page-header"><h1>Room not found</h1><a href="#/voice-rooms" class="btn btn-gold">Back to Rooms</a></div>');
       }
-      if (room.premium && !Auth.isPremium()) {
-        return Components.renderAppLayout(`
-          <div class="page-header">
-            <h1>Premium Room</h1>
-            <p>${room.title} requires a Premium subscription.</p>
-            <a href="#/premium" class="btn btn-gold">Upgrade to Premium</a>
-            <a href="#/voice-rooms" class="btn btn-outline-gold">Back</a>
-          </div>
-        `);
-      }
-
       Storage.joinRoom(roomId);
       const user = Auth.getCurrentUser();
       const listeners = APP_DATA.roomListeners[roomId] || [room.host];
@@ -434,14 +425,13 @@ const Pages = {
       <div class="page-header">
         <h1>Voice Chat Rooms</h1>
         <p>Join live poetry discussions and recitations</p>
-        ${Auth.canCreateRoom() ? '<button class="btn btn-gold" id="create-room-btn">Create Room</button>' : '<a href="#/premium" class="btn btn-outline-gold">Premium: Create Rooms</a>'}
+        <button class="btn btn-gold" id="create-room-btn">Create Room</button>
       </div>
       <div class="rooms-grid">
         ${getAllVoiceRooms().map(room => `
-          <div class="room-card ${room.premium ? 'premium-room' : ''}">
+          <div class="room-card content-card-v2">
             <div class="room-header">
               <h3>${room.title}</h3>
-              ${room.premium ? '<span class="premium-badge">Premium</span>' : ''}
               <span class="active-badge">${room.active ? '● Active' : 'Offline'}</span>
             </div>
             <p>Host: ${room.host}</p>
@@ -469,16 +459,13 @@ const Pages = {
       <section class="contests-section">
         <h2>Active Contests</h2>
         ${active.map(contest => `
-          <div class="contest-card">
+          <div class="contest-card content-card-v2">
             <div class="contest-info">
-              <h3>${contest.title} ${contest.premium ? '<span class="premium-badge">Premium</span>' : ''}</h3>
+              <h3>${contest.title}</h3>
               <p>Prize: ${contest.prize} · Deadline: ${contest.deadline}</p>
               <p>${contest.entries} entries</p>
             </div>
-            ${contest.premium && !Auth.isPremium() ?
-              '<a href="#/premium" class="btn btn-outline-gold">Premium Required</a>' :
-              `<button class="btn btn-gold submit-contest-btn" data-contest-id="${contest.id}">Submit Poetry</button>`
-            }
+            <button class="btn btn-gold submit-contest-btn" data-contest-id="${contest.id}">Submit Poetry</button>
           </div>
         `).join('')}
       </section>
@@ -522,10 +509,9 @@ const Pages = {
             `).join('')}
           </div>
           <form class="chat-input" id="chat-form" data-chat-id="${chatId}">
-            <input type="text" placeholder="Type a message..." required ${!Auth.canMessage() ? 'disabled' : ''}>
-            <button type="submit" class="btn btn-gold" ${!Auth.canMessage() ? 'disabled' : ''}>Send</button>
+            <input type="text" placeholder="Type a message..." required>
+            <button type="submit" class="btn btn-gold">Send</button>
           </form>
-          ${!Auth.canMessage() ? '<p class="limit-warning">Message limit reached. <a href="#/premium">Upgrade to Premium</a></p>' : ''}
         </div>
       `;
       return Components.renderAppLayout(content, { noSidebar: true });
@@ -554,7 +540,6 @@ const Pages = {
           </a>
         `).join('')}
       </div>
-      ${!Auth.canMessage() ? `<div class="limit-box"><p>Free users: ${APP_DATA.freeLimits.messages} messages max</p><a href="#/premium" class="btn btn-gold">Upgrade</a></div>` : ''}
     `;
     return Components.renderAppLayout(content);
   },
@@ -587,7 +572,7 @@ const Pages = {
     const content = `
       <div class="page-header">
         <h1>Bookmarks</h1>
-        <p>${poems.length} saved poems ${!Auth.isPremium() ? `(max ${APP_DATA.freeLimits.bookmarks})` : ''}</p>
+        <p>${poems.length} saved poems</p>
       </div>
       <div class="poem-feed">
         ${poems.length ? poems.map(p => Components.renderPoemCard(p)).join('') : '<p class="empty-state">No bookmarks yet. Save poems to read later!</p>'}
@@ -700,91 +685,30 @@ const Pages = {
   },
 
   premium() {
-    const content = `
-      <div class="premium-page">
-        <div class="premium-hero">
-          <h1>👑 Upgrade to Premium</h1>
-          <p>Unlock the full Urdu Poetry experience</p>
-        </div>
-        <div class="premium-features-grid">
-          ${APP_DATA.premiumFeatures.map(f => `
-            <div class="premium-feature">
-              <span class="feature-icon">${f.icon}</span>
-              <h3>${f.title}</h3>
-              <p>${f.desc}</p>
-            </div>
-          `).join('')}
-        </div>
-        <div class="premium-plans-section">
-          <h2>Choose Your Plan</h2>
-          <div class="premium-plans">
-            ${APP_DATA.premiumPlans.map(plan => `
-              <div class="plan-card ${plan.badge ? 'featured' : ''}">
-                ${plan.badge ? `<span class="plan-badge">${plan.badge}</span>` : ''}
-                <h3>${plan.name}</h3>
-                <div class="plan-price">${plan.price}<span>${plan.period}</span></div>
-                <p class="plan-note">${plan.note}</p>
-                <button class="btn btn-gold subscribe-btn" data-plan="${plan.id}">Start ${plan.id === 'yearly' ? 'Yearly' : 'Monthly'}</button>
-              </div>
-            `).join('')}
-          </div>
-        </div>
-        <div class="free-limits-box">
-          <h3>Free User Limits</h3>
-          <ul>
-            <li>Max ${APP_DATA.freeLimits.messages} Messages</li>
-            <li>Max ${APP_DATA.freeLimits.bookmarks} Bookmarks</li>
-            <li>Max ${APP_DATA.freeLimits.poemsPerDay} Poems Per Day</li>
-            <li>Limited Profile Visits</li>
-            <li>Ads Enabled</li>
-          </ul>
-        </div>
-        <div class="payment-methods">
-          <span>Visa</span><span>Mastercard</span><span>PayPal</span><span>Apple Pay</span><span>Google Pay</span>
-        </div>
-      </div>
-    `;
-    return Components.renderAppLayout(content, { showPremium: false, fullWidth: true });
+    setTimeout(() => Router.go('/'), 0);
+    return Components.renderAppLayout('<p class="empty-state">Redirecting...</p>');
   },
 
   login() {
     const content = `
-      <div class="auth-container">
-        <div class="auth-card">
-          <img src="${APP_DATA.logo}" alt="Urdu Poetry" class="auth-logo">
-          <h1>Urdu Poetry</h1>
-          <p class="auth-tagline">A gathering of souls through verse.</p>
-          <div class="auth-tabs">
-            <a href="#/login" class="auth-tab active">Sign In</a>
-            <a href="#/register" class="auth-tab">Sign Up</a>
-          </div>
-          <form id="login-form" class="auth-form">
-            <div class="form-group">
-              <label>Email or Username</label>
-              <input type="text" name="email" required placeholder="Email or username" autocomplete="username">
+      <div class="auth-container auth-modern">
+        <div class="auth-card auth-modern-card">
+          <a href="#/" class="auth-back" aria-label="Back">${Components.icon('back')}</a>
+          <h1 class="auth-welcome">WELCOME BACK!</h1>
+          <p class="auth-subtitle">Today is a new day. It's your day. You shape it. Sign in to start reading and sharing poetry.</p>
+          <form id="login-form" class="auth-form auth-form-modern">
+            <input type="text" name="email" required placeholder="Email address" autocomplete="username">
+            <div class="password-field">
+              <input type="password" name="password" required placeholder="Password" autocomplete="current-password">
+              <button type="button" class="password-toggle" aria-label="Show password">${Components.icon('eye')}</button>
             </div>
-            <div class="form-group">
-              <label>Password</label>
-              <input type="password" name="password" required placeholder="Enter your password">
-              <a href="#/forgot-password" class="forgot-link">Forgot Password?</a>
-            </div>
-            <button type="submit" class="btn btn-gold btn-block">Sign In</button>
+            <a href="#/forgot-password" class="forgot-link-right">Forgot password?</a>
+            <button type="submit" class="btn btn-gold btn-block auth-submit">Login</button>
           </form>
-          <div class="social-divider">or continue with</div>
-          <div class="social-buttons">
-            <button class="btn btn-social" data-social="google">Continue with Google</button>
-            <button class="btn btn-social" data-social="facebook">Continue with Facebook</button>
-          </div>
-          <a href="#/register" class="auth-switch">Don't have an account? Sign Up</a>
+          <p class="auth-switch">Don't have an account? <a href="#/register">Sign Up</a></p>
+          <div class="social-divider">Or continue with</div>
+          ${Components.renderSocialAuthIcons()}
           <a href="#/" class="guest-link" id="guest-login">Continue browsing as guest</a>
-          <p class="auth-footer-urdu urdu-text">شاعری دلوں کی زبان ہے</p>
-          <p class="auth-footer">Poetry is the language of hearts.</p>
-        </div>
-        <div class="auth-features">
-          <div class="auth-feature"><span>🚪</span><h4>Easy Login</h4><p>Login with Email, Google or Facebook</p></div>
-          <div class="auth-feature"><span>🛡️</span><h4>Secure & Private</h4><p>Your data is safe with us</p></div>
-          <div class="auth-feature"><span>🔑</span><h4>Password Recovery</h4><p>Reset your password via email</p></div>
-          <div class="auth-feature"><span>💬</span><h4>Bilingual Support</h4><p>English & Urdu</p></div>
         </div>
       </div>
     `;
@@ -793,47 +717,31 @@ const Pages = {
 
   register() {
     const content = `
-      <div class="auth-container">
-        <div class="auth-card">
-          <img src="${APP_DATA.logo}" alt="Urdu Poetry" class="auth-logo">
-          <h1>Urdu Poetry</h1>
-          <p class="auth-tagline">A gathering of souls through verse.</p>
-          <div class="auth-tabs">
-            <a href="#/login" class="auth-tab">Sign In</a>
-            <a href="#/register" class="auth-tab active">Sign Up</a>
-          </div>
-          <form id="register-form" class="auth-form">
-            <div class="form-group">
-              <label>Full Name</label>
-              <input type="text" name="name" required placeholder="Enter your full name">
+      <div class="auth-container auth-modern">
+        <div class="auth-card auth-modern-card">
+          <a href="#/login" class="auth-back" aria-label="Back">${Components.icon('back')}</a>
+          <h1 class="auth-welcome">CREATE ACCOUNT</h1>
+          <p class="auth-subtitle">Join our community of poets and poetry lovers. Share your verses with the world.</p>
+          <form id="register-form" class="auth-form auth-form-modern">
+            <input type="text" name="name" required placeholder="Full name">
+            <input type="text" name="username" required pattern="[a-zA-Z0-9_]{3,20}" placeholder="Username" autocomplete="username">
+            <input type="email" name="email" required placeholder="Email address" autocomplete="email">
+            <div class="password-field">
+              <input type="password" name="password" required minlength="8" placeholder="Password (min 8 characters)" autocomplete="new-password">
+              <button type="button" class="password-toggle" aria-label="Show password">${Components.icon('eye')}</button>
             </div>
-            <div class="form-group">
-              <label>Username</label>
-              <input type="text" name="username" required pattern="[a-zA-Z0-9_]{3,20}" placeholder="Choose a unique username" autocomplete="username">
-            </div>
-            <div class="form-group">
-              <label>Email</label>
-              <input type="email" name="email" required placeholder="Enter your email" autocomplete="email">
-            </div>
-            <div class="form-group">
-              <label>Password</label>
-              <input type="password" name="password" required minlength="8" placeholder="Min 8 characters">
-            </div>
-            <div class="form-group">
-              <label>Confirm Password</label>
-              <input type="password" name="confirm" required placeholder="Confirm password">
+            <div class="password-field">
+              <input type="password" name="confirm" required placeholder="Confirm password" autocomplete="new-password">
+              <button type="button" class="password-toggle" aria-label="Show password">${Components.icon('eye')}</button>
             </div>
             <label class="checkbox-label">
-              <input type="checkbox" required> I agree with Terms & Conditions and Privacy Policy
+              <input type="checkbox" required> I agree to the Terms & Conditions and Privacy Policy
             </label>
-            <button type="submit" class="btn btn-gold btn-block">Create Account</button>
+            <button type="submit" class="btn btn-gold btn-block auth-submit">Create Account</button>
           </form>
-          <div class="social-divider">or continue with</div>
-          <div class="social-buttons">
-            <button class="btn btn-social" data-social="google">Continue with Google</button>
-            <button class="btn btn-social" data-social="facebook">Continue with Facebook</button>
-          </div>
-          <a href="#/login" class="auth-switch">Already have an account? Sign In</a>
+          <p class="auth-switch">Already have an account? <a href="#/login">Sign In</a></p>
+          <div class="social-divider">Or continue with</div>
+          ${Components.renderSocialAuthIcons()}
           <a href="#/" class="guest-link" id="guest-login">Continue browsing as guest</a>
         </div>
       </div>
@@ -931,7 +839,7 @@ const Pages = {
     const themes = [
       { id: 'classic-dark', label: 'Classic Dark', icon: '🌙' },
       { id: 'golden-border', label: 'Golden Border', icon: '✨' },
-      { id: 'premium-paper', label: 'Premium Paper', icon: '📜' }
+      { id: 'premium-paper', label: 'Gold Paper', icon: '📜' }
     ];
 
     const content = `
@@ -941,7 +849,7 @@ const Pages = {
             ${avatarImg(user.name, 'dashboard-avatar', user.name)}
             <div>
               <h1>${user.name}</h1>
-              <p>${user.isGuest ? 'Guest User' : (user.premium ? '👑 Premium Poet' : 'Free Member')}</p>
+              <p>${user.isGuest ? 'Guest User' : 'Member'}</p>
             </div>
           </div>
           <button type="button" class="btn btn-gold" id="dashboard-write-btn">+ Write Poetry</button>
@@ -1007,7 +915,6 @@ const Pages = {
           <a href="#/bookmarks">Bookmarks</a>
           <a href="#/history">History</a>
           <a href="#/settings">Settings</a>
-          <a href="#/premium">Premium</a>
         </div>
       </div>
     `;
@@ -1065,7 +972,7 @@ const Pages = {
         <section class="admin-section">
           <h2>Contest Manager</h2>
           ${contests.map(c => `
-            <div class="contest-card">
+            <div class="contest-card content-card-v2">
               <div>
                 <h3>${c.title}</h3>
                 <p>${c.entries} entries · Deadline: ${c.deadline} · Prize: ${c.prize}</p>

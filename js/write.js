@@ -1,10 +1,17 @@
 function formatPoemHtml(text, theme) {
   const cardTheme = theme || Storage.getCardTheme();
   const lines = (text || '').split('\n').filter(line => line.trim());
-  if (!lines.length) return '<div class="poem-lines poem-theme-classic-dark"><span class="poem-line urdu-text">&nbsp;</span></div>';
-  return `<div class="poem-lines poem-theme-${cardTheme}">${lines.map(line =>
-    `<span class="poem-line urdu-text">${line.trim()}</span>`
-  ).join('')}</div>`;
+  if (!lines.length) {
+    return '<div class="poem-lines poem-theme-golden"><span class="poem-line urdu-text">&nbsp;</span></div>';
+  }
+  const lineHtml = lines.map((line, i) => {
+    const verse = `<span class="poem-line urdu-text">${line.trim()}</span>`;
+    if (i < lines.length - 1) {
+      return `${verse}<div class="poem-verse-divider" aria-hidden="true"><span></span></div>`;
+    }
+    return verse;
+  }).join('');
+  return `<div class="poem-lines poem-theme-golden poem-theme-${cardTheme}">${lineHtml}</div>`;
 }
 
 function getAllPoems() {
@@ -45,7 +52,7 @@ const Write = {
     const themes = [
       { id: 'classic-dark', label: 'Classic Dark', icon: '🌙' },
       { id: 'golden-border', label: 'Golden Border', icon: '✨' },
-      { id: 'premium-paper', label: 'Premium Paper', icon: '📜' }
+      { id: 'premium-paper', label: 'Gold Paper', icon: '📜' }
     ];
     const currentTheme = draft?.cardTheme || Storage.getCardTheme();
     const hasDraftText = Boolean(draft?.text?.trim());

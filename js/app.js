@@ -96,10 +96,6 @@ const App = {
     document.querySelectorAll('[data-action="bookmark"]').forEach(btn => {
       btn.onclick = async () => {
         const id = parseInt(btn.dataset.id);
-        if (!Storage.isBookmarked(id) && !Auth.canBookmark()) {
-          Components.showToast('Bookmark limit reached. Upgrade to Premium!', 'error');
-          return;
-        }
         let saved;
         if (SupabaseClient.isEnabled() && Auth.isLoggedIn()) {
           saved = await API.toggleBookmark(id);
@@ -198,10 +194,6 @@ const App = {
       btn.onclick = () => {
         const roomId = parseInt(btn.dataset.roomId);
         const room = getVoiceRoomById(roomId);
-        if (room?.premium && !Auth.isPremium()) {
-          Components.showToast('Premium room. Upgrade to join!', 'error');
-          return;
-        }
         Storage.joinRoom(roomId);
         Router.go(`/voice-rooms/${roomId}`);
       };
@@ -311,7 +303,7 @@ const App = {
       chatForm.onsubmit = (e) => {
         e.preventDefault();
         if (!Auth.canMessage()) {
-          Components.showToast('Message limit reached!', 'error');
+          Components.showToast('Please login to send messages', 'error');
           return;
         }
         const input = chatForm.querySelector('input');
@@ -462,6 +454,17 @@ const App = {
       };
     }
 
+    // Password visibility toggle
+    document.querySelectorAll('.password-toggle').forEach(btn => {
+      btn.onclick = () => {
+        const field = btn.closest('.password-field')?.querySelector('input');
+        if (!field) return;
+        const show = field.type === 'password';
+        field.type = show ? 'text' : 'password';
+        btn.innerHTML = show ? Components.icon('eyeOff') : Components.icon('eye');
+      };
+    });
+
     // Logout
     const logoutBtn = document.getElementById('logout-btn');
     if (logoutBtn) {
@@ -473,15 +476,6 @@ const App = {
         Router.go('/');
       };
     }
-
-    // Premium subscribe
-    document.querySelectorAll('.subscribe-btn').forEach(btn => {
-      btn.onclick = () => {
-        Auth.upgradePremium(btn.dataset.plan);
-        Components.showToast('Welcome to Premium! 👑');
-        Router.go('/');
-      };
-    });
 
     // Settings forms
     const accountForm = document.getElementById('account-form');
