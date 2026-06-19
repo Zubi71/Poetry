@@ -28,12 +28,17 @@ async function loadRemoteData() {
     window.REMOTE_VOICE_ROOMS = [];
     return;
   }
-  const [poems, mushaira, rooms, tags, featuredId] = await Promise.all([
+  const timeout = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+  const fetchAll = Promise.all([
     API.fetchPoems(),
     API.fetchMushairaEvents(),
     API.fetchVoiceRooms(),
     API.getWritingTags(),
     API.getFeaturedPoemId()
+  ]);
+  const [poems, mushaira, rooms, tags, featuredId] = await Promise.race([
+    fetchAll,
+    timeout(8000).then(() => [null, null, null, null, null])
   ]);
   window.REMOTE_POEMS = poems || [];
   window.REMOTE_MUSHAIRA_EVENTS = mushaira || [];

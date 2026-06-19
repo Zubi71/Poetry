@@ -8,6 +8,11 @@ const App = {
     }
   },
 
+  _hideLoadingScreen() {
+    const loading = document.getElementById('loading-screen');
+    if (loading) loading.style.display = 'none';
+  },
+
   async init() {
     const storedUser = Storage.getUser();
     if (storedUser && storedUser.avatar && String(storedUser.avatar).includes('pravatar')) {
@@ -15,21 +20,40 @@ const App = {
       Storage.setUser(storedUser);
     }
     Components.closeModal();
+    this._hideLoadingScreen();
 
-    if (SupabaseClient.isEnabled()) {
-      await Auth.init();
-      await loadRemoteData();
-      if (typeof MushairaEvents !== 'undefined') MushairaEvents.subscribe();
-      if (typeof VoiceRoomsList !== 'undefined') VoiceRoomsList.subscribe();
-      if (Auth.isLoggedIn() && !Auth.isGuest() && typeof Realtime !== 'undefined') {
-        await Realtime.init();
-      }
+    // Never block the UI on network — bootstrap Supabase in background
+    const loaderMaxMs = 4000;
+
+    try {
+      Auth.ensureGuestBrowsing();
+      Router.init();
+      this.bindGlobalEvents();
+    } catch (err) {
+      console.error('App startup:', err);
     }
 
-    Auth.ensureGuestBrowsing();
+    if (!SupabaseClient.isEnabled()) return;
 
-    Router.init();
-    this.bindGlobalEvents();
+    try {
+      await Promise.race([
+        this._bootstrapSupabase(),
+        new Promise(resolve => setTimeout(resolve, loaderMaxMs))
+      ]);
+    } catch (err) {
+      console.warn('Supabase bootstrap:', err);
+    }
+    Router.navigate();
+  },
+
+  async _bootstrapSupabase() {
+    await Auth.init();
+    await loadRemoteData();
+    if (typeof MushairaEvents !== 'undefined') MushairaEvents.subscribe();
+    if (typeof VoiceRoomsList !== 'undefined') VoiceRoomsList.subscribe();
+    if (Auth.isLoggedIn() && !Auth.isGuest() && typeof Realtime !== 'undefined') {
+      await Realtime.init();
+    }
   },
 
   bindGlobalEvents() {
@@ -744,6 +768,7 @@ const App = {
         leavePath: liveRoom.dataset.leavePath || '/voice-rooms'
       });
       document.getElementById('live-chat-toggle-mobile')?.addEventListener('click', () => {
+        document.querySelector('.live-v2-chat-card')?.classList.toggle('mobile-open');
         document.querySelector('.live-room-chat-panel')?.classList.toggle('mobile-open');
       });
     } else if (typeof VoiceRoomLive !== 'undefined') {

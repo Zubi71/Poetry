@@ -329,23 +329,22 @@ const Components = {
   },
 
   renderAppLayout(content, options = {}) {
-    const { fullWidth = false, noSidebar = false, authPage = false } = options;
+    const { fullWidth = false, noSidebar = false, authPage = false, liveRoom = false } = options;
     if (authPage) {
       return `<div class="auth-layout">${content}</div>`;
     }
     return `
-      <div class="app-layout">
+      <div class="app-layout${liveRoom ? ' live-room-layout' : ''}">
         ${this.renderHeader()}
-        ${Auth.showAds() ? this.renderAd('header') : ''}
-        <div id="mushaira-live-banner-root"></div>
-        <div class="main-container ${fullWidth ? 'full-width' : ''} ${noSidebar ? 'no-sidebar' : ''}">
+        ${liveRoom || !Auth.showAds() ? '' : this.renderAd('header')}
+        ${liveRoom ? '' : '<div id="mushaira-live-banner-root"></div>'}
+        <div class="main-container ${fullWidth ? 'full-width' : ''} ${noSidebar ? 'no-sidebar live-main' : ''}">
           ${noSidebar ? '' : this.renderSidebar()}
-          <main class="main-content" id="main-content">${content}</main>
+          <main class="main-content${liveRoom ? ' live-main-content' : ''}" id="main-content">${content}</main>
           ${noSidebar || fullWidth ? '' : this.renderRightSidebar()}
         </div>
-        ${options.showPremium !== false ? '' : ''}
-        ${this.renderFooter()}
-        ${this.renderBottomNav()}
+        ${liveRoom ? '' : this.renderFooter()}
+        ${liveRoom ? '' : this.renderBottomNav()}
       </div>
     `;
   },

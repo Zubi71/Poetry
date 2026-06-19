@@ -72,11 +72,22 @@ const Auth = {
     this._initializing = true;
 
     const sb = SupabaseClient.init();
-    if (!sb) return;
+    if (!sb) {
+      this._initializing = false;
+      return;
+    }
 
-    const { data: { session } } = await sb.auth.getSession();
-    if (session) {
-      await this._applySession(session);
+    try {
+      const sessionResult = await Promise.race([
+        sb.auth.getSession(),
+        new Promise(resolve => setTimeout(() => resolve({ data: { session: null } }), 5000))
+      ]);
+      const session = sessionResult?.data?.session;
+      if (session) {
+        await this._applySession(session, { skipRealtime: true });
+      }
+    } catch (err) {
+      console.warn('Auth session:', err);
     }
 
     sb.auth.onAuthStateChange(async (event, session) => {
@@ -96,13 +107,21 @@ const Auth = {
     this._initializing = false;
   },
 
-  async _applySession(session) {
+  async _applySession(session, opts = {}) {
     this._session = session;
-    const profile = await API.getProfile(session.user.id);
+    const profile = await Promise.race([
+      API.getProfile(session.user.id),
+      new Promise(resolve => setTimeout(() => resolve(null), 5000))
+    ]);
     const user = API.mapProfile(profile, session.user);
     Storage.setUser(user);
-    await API.syncUserData();
-    if (typeof Realtime !== 'undefined') await Realtime.init();
+    await Promise.race([
+      API.syncUserData(),
+      new Promise(resolve => setTimeout(resolve, 5000))
+    ]).catch(() => {});
+    if (!opts.skipRealtime && typeof Realtime !== 'undefined') {
+      await Realtime.init();
+    }
   },
 
   async login(emailOrUsername, password) {

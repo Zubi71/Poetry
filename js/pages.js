@@ -380,7 +380,7 @@ const Pages = {
         <p class="loading-inline">Joining event...</p>
       </div>
     `;
-    return Components.renderAppLayout(content, { noSidebar: true });
+    return Components.renderAppLayout(content, { noSidebar: true, liveRoom: true });
   },
 
   voiceRooms(params) {
@@ -401,7 +401,7 @@ const Pages = {
         backPath: '#/voice-rooms',
         leavePath: '/voice-rooms'
       });
-      return Components.renderAppLayout(content, { noSidebar: true, showPremium: false });
+      return Components.renderAppLayout(content, { noSidebar: true, liveRoom: true });
     }
 
     const joined = Storage.getJoinedRooms();
