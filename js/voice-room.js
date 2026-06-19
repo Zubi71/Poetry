@@ -239,11 +239,19 @@ const VoiceRoomLive = {
   },
 
   _getAllParticipants() {
-    const list = [];
+    const byId = new Map();
     Object.values(this.presenceState).forEach(arr => {
-      (arr || []).forEach(p => { if (p?.userId) list.push(p); });
+      (arr || []).forEach(p => {
+        if (p?.userId) byId.set(p.userId, { ...byId.get(p.userId), ...p });
+      });
     });
-    return list;
+    return [...byId.values()].sort((a, b) => {
+      if (a.isHost) return -1;
+      if (b.isHost) return 1;
+      if (a.slot && !b.slot) return -1;
+      if (b.slot && !a.slot) return 1;
+      return (a.name || '').localeCompare(b.name || '');
+    });
   },
 
   _getParticipant(userId) {
@@ -295,17 +303,20 @@ const VoiceRoomLive = {
     if (icon) icon.textContent = this.micOn && !blocked ? '🎙️' : '🎤';
 
     const prompt = document.getElementById('live-mic-prompt');
+    const promptBtn = document.getElementById('live-mic-prompt-btn');
     if (prompt) {
       if (blocked) {
         prompt.hidden = false;
+        prompt.className = 'live-status-bar live-status-bar-warn';
         prompt.querySelector('.live-mic-prompt-text').textContent =
-          this.mutedByHost ? 'The host muted your microphone.' : 'Speaking permission revoked by host.';
-        prompt.querySelector('#live-mic-prompt-btn')?.setAttribute('hidden', '');
+          this.mutedByHost ? 'Host muted your microphone.' : 'Speaking permission revoked by host.';
+        if (promptBtn) promptBtn.hidden = true;
       } else if (this.mySlot && !this.micOn) {
         prompt.hidden = false;
+        prompt.className = 'live-status-bar';
         prompt.querySelector('.live-mic-prompt-text').textContent =
-          `Seat ${this.mySlot} reserved — tap Mic Off below or your avatar to speak.`;
-        prompt.querySelector('#live-mic-prompt-btn')?.removeAttribute('hidden');
+          `Seat ${this.mySlot} reserved — enable mic to speak.`;
+        if (promptBtn) promptBtn.hidden = false;
       } else {
         prompt.hidden = true;
       }
@@ -327,49 +338,43 @@ const VoiceRoomLive = {
     if (maxEl) maxEl.textContent = this.maxSlots;
   },
 
-  _renderSlots() {
-    const grid = document.getElementById('live-room-slots');
-    if (!grid) return;
-
+  _renderSlotCell(slot, occupant, opts = {}) {
     const user = Auth.getCurrentUser();
-    const maxSlots = this.maxSlots;
-    const compact = maxSlots > 30;
-    grid.classList.toggle('compact-grid', compact);
+    const isMe = occupant?.userId === user?.id;
+    const audible = occupant && this._isAudible(occupant);
+    const speaking = occupant?.isSpeaking && audible;
+    const hostMuted = occupant?.mutedByHost;
+    const size = opts.size || 'md';
 
-    grid.innerHTML = Array.from({ length: maxSlots }, (_, i) => {
-      const slot = i + 1;
-      const occupant = this._getParticipantInSlot(slot);
-      const isMe = occupant?.userId === user?.id;
-      const audible = occupant && this._isAudible(occupant);
-      const speaking = occupant?.isSpeaking && audible;
-      const hostMuted = occupant?.mutedByHost;
+    if (occupant) {
+      const micBtn = isMe && !hostMuted && this.canSpeak ? `
+        <button type="button" class="live-slot-mic ${audible ? 'on' : 'off'} mic-toggle-btn" aria-label="${audible ? 'Mute' : 'Unmute'}">
+          ${speaking ? '🗣️' : audible ? '🎙️' : '🔇'}
+        </button>
+      ` : `<span class="live-slot-mic ${hostMuted ? 'host-muted' : audible ? 'on' : 'off'}">${hostMuted ? '🚫' : speaking ? '🗣️' : audible ? '🎙️' : '🔇'}</span>`;
 
-      if (occupant) {
-        const micBtn = isMe && !hostMuted && this.canSpeak ? `
-          <button type="button" class="live-slot-mic ${audible ? 'on' : 'off'} mic-toggle-btn" aria-label="${audible ? 'Mute' : 'Unmute'}">
-            ${speaking ? '🗣️' : audible ? '🎙️' : '🔇'}
-          </button>
-        ` : `<span class="live-slot-mic ${hostMuted ? 'host-muted' : audible ? 'on' : 'off'}">${hostMuted ? '🚫' : speaking ? '🗣️' : audible ? '🎙️' : '🔇'}</span>`;
-
-        return `
-          <button type="button" class="live-slot occupied ${isMe ? 'me' : ''} ${speaking ? 'speaking' : audible ? 'live' : ''} ${hostMuted ? 'host-muted' : ''}" data-slot="${slot}">
-            <div class="live-slot-avatar-wrap">
-              ${avatarImg(occupant.name, 'live-slot-avatar', occupant.name)}
-              ${micBtn}
-            </div>
-            <span class="live-slot-name">${isMe ? 'You' : (occupant.name || '').split(' ')[0]}</span>
-            ${occupant.isHost ? '<span class="live-slot-badge">Host</span>' : ''}
-          </button>
-        `;
-      }
       return `
-        <button type="button" class="live-slot empty" data-slot="${slot}">
-          <div class="live-slot-empty-icon">+</div>
-          <span class="live-slot-label">${compact ? slot : 'NO.' + slot}</span>
+        <button type="button" class="live-slot occupied size-${size} ${isMe ? 'me' : ''} ${speaking ? 'speaking' : audible ? 'live' : ''} ${hostMuted ? 'host-muted' : ''}" data-slot="${slot}">
+          <div class="live-slot-avatar-wrap">
+            ${avatarImg(occupant.name, 'live-slot-avatar', occupant.name)}
+            ${micBtn}
+          </div>
+          <span class="live-slot-name">${isMe ? 'You' : (occupant.name || '').split(' ')[0]}</span>
+          ${occupant.isHost ? '<span class="live-slot-badge">Host</span>' : ''}
         </button>
       `;
-    }).join('');
+    }
 
+    return `
+      <button type="button" class="live-slot empty size-${size}" data-slot="${slot}" title="Seat ${slot}">
+        <div class="live-slot-empty-icon">${opts.compact ? slot : '+'}</div>
+        ${opts.compact ? '' : `<span class="live-slot-label">${slot}</span>`}
+      </button>
+    `;
+  },
+
+  _bindSlotGrid(grid) {
+    if (!grid) return;
     grid.querySelectorAll('.live-slot').forEach(btn => {
       btn.onclick = (e) => {
         if (e.target.closest('.mic-toggle-btn')) {
@@ -380,6 +385,33 @@ const VoiceRoomLive = {
         this._handleSlotClick(parseInt(btn.dataset.slot, 10));
       };
     });
+  },
+
+  _renderSlots() {
+    const maxSlots = this.maxSlots;
+    const isLargeHall = maxSlots > 30;
+    const stageCount = isLargeHall ? 12 : Math.min(maxSlots, 15);
+    const stageGrid = document.getElementById('live-stage-slots');
+    const hallGrid = document.getElementById('live-hall-slots');
+    const singleGrid = document.getElementById('live-room-slots');
+
+    if (isLargeHall && stageGrid && hallGrid) {
+      stageGrid.innerHTML = Array.from({ length: stageCount }, (_, i) =>
+        this._renderSlotCell(i + 1, this._getParticipantInSlot(i + 1), { size: 'lg' })
+      ).join('');
+      hallGrid.innerHTML = Array.from({ length: maxSlots - stageCount }, (_, i) =>
+        this._renderSlotCell(stageCount + i + 1, this._getParticipantInSlot(stageCount + i + 1), { compact: true, size: 'sm' })
+      ).join('');
+      this._bindSlotGrid(stageGrid);
+      this._bindSlotGrid(hallGrid);
+      const hallLabel = document.getElementById('live-hall-label');
+      if (hallLabel) hallLabel.textContent = `Audience Seats ${stageCount + 1}–${maxSlots}`;
+    } else if (singleGrid) {
+      singleGrid.innerHTML = Array.from({ length: maxSlots }, (_, i) =>
+        this._renderSlotCell(i + 1, this._getParticipantInSlot(i + 1), { size: 'md' })
+      ).join('');
+      this._bindSlotGrid(singleGrid);
+    }
 
     this._updateMicUI();
     this._updateHostPanelVisibility();
@@ -962,8 +994,29 @@ const VoiceRoomLive = {
 
 function renderLiveRoomView(meta) {
   const maxSeats = meta.maxSeats || ((meta.roomKey || '').startsWith('mushaira') ? LIVE_ROOM.MUSHAIRA_SEATS : LIVE_ROOM.VOICE_ROOM_SEATS);
+  const isLargeHall = maxSeats > 30;
+
+  const seatingHtml = isLargeHall ? `
+    <div class="live-seating-map">
+      <div class="live-seating-section">
+        <div class="live-seating-section-head">
+          <h3>Main Stage</h3>
+          <span class="live-seating-hint">Seats 1–12</span>
+        </div>
+        <div class="live-room-slots live-stage-slots" id="live-stage-slots"></div>
+      </div>
+      <div class="live-seating-section live-hall-section">
+        <div class="live-seating-section-head">
+          <h3 id="live-hall-label">Audience Seats 13–${maxSeats}</h3>
+          <span class="live-seating-hint">${maxSeats - 12} seats</span>
+        </div>
+        <div class="live-room-slots live-hall-slots" id="live-hall-slots"></div>
+      </div>
+    </div>
+  ` : `<div class="live-room-slots live-standard-slots" id="live-room-slots"></div>`;
+
   return `
-    <div class="live-room-page"
+    <div class="live-room-page live-room-pro"
       data-room-key="${meta.roomKey || ''}"
       data-room-title="${(meta.title || '').replace(/"/g, '&quot;')}"
       data-room-host="${(meta.host || '').replace(/"/g, '&quot;')}"
@@ -971,69 +1024,72 @@ function renderLiveRoomView(meta) {
       data-host-owner-id="${meta.hostOwnerId || ''}"
       data-max-seats="${maxSeats}"
       data-leave-path="${meta.leavePath || '/voice-rooms'}">
-      <div class="live-room-topbar">
+      <header class="live-room-topbar live-room-topbar-pro">
         <a href="${meta.backPath || '#/voice-rooms'}" class="back-link">${Components.icon('back')}</a>
         <div class="live-room-info">
-          <h1>${meta.title}</h1>
-          <p>Room: ${meta.roomId} · Host: ${meta.host} · <span id="live-room-count">1</span> online · <span id="live-seat-filled">0</span>/<span id="live-seat-max">${maxSeats}</span> seated</p>
+          <div class="live-room-title-row">
+            <h1>${meta.title}</h1>
+            <span class="live-room-live-badge">LIVE</span>
+          </div>
+          <p class="live-room-subtitle">Hosted by ${meta.host}</p>
         </div>
-        <span class="live-room-live-badge">● LIVE</span>
-      </div>
+        <div class="live-room-stats">
+          <div class="live-stat-chip"><span id="live-room-count">0</span><label>Online</label></div>
+          <div class="live-stat-chip live-stat-gold"><span id="live-seat-filled">0</span>/<span id="live-seat-max">${maxSeats}</span><label>Seated</label></div>
+        </div>
+      </header>
 
       <div id="live-host-panel" class="live-host-panel" hidden>
-        <span class="live-host-badge">★ Host Controls</span>
-        <span class="live-host-hint">Mute, unmute, revoke speaking, or remove participants from the list →</span>
+        <span class="live-host-badge">Host</span>
+        <span class="live-host-hint">Manage participants in the panel →</span>
       </div>
 
-      <div class="live-room-body live-room-body-extended">
+      <div id="live-mic-prompt" class="live-status-bar" hidden>
+        <span class="live-mic-prompt-text"></span>
+        <button type="button" class="btn btn-gold btn-sm" id="live-mic-prompt-btn">Enable Mic</button>
+      </div>
+
+      <div class="live-room-body live-room-body-pro">
         <div class="live-room-main-col">
           <div class="live-room-stage-wrap">
             <div class="live-room-actions-bar">
-              <button type="button" class="btn btn-gold btn-sm" id="live-checkin-btn">Check In (Get Seat)</button>
+              <button type="button" class="btn btn-gold btn-sm" id="live-checkin-btn">Check In — Get a Seat</button>
+              <span class="live-actions-note">${maxSeats} seats total</span>
             </div>
-            <div id="live-mic-prompt" class="live-mic-prompt" hidden>
-              <span class="live-mic-prompt-text">Turn on your microphone to speak</span>
-              <button type="button" class="btn btn-gold btn-sm" id="live-mic-prompt-btn">Turn On Mic</button>
-            </div>
-            <div class="live-room-stage">
-              <div class="live-room-slots" id="live-room-slots"></div>
-            </div>
+            <div class="live-room-stage live-room-stage-pro">${seatingHtml}</div>
           </div>
-
-          <div class="live-room-chat-panel">
+          <div class="live-room-chat-panel live-room-chat-pro">
             <div class="live-room-chat-header">
-              <span>Live Chat</span>
+              <span>Room Chat</span>
               <button type="button" class="live-chat-toggle-btn" id="live-chat-toggle">−</button>
             </div>
             <div class="live-room-messages" id="live-room-messages"></div>
             <form class="live-room-chat-form" id="live-room-chat-form">
-              <input type="text" placeholder="Say something..." maxlength="300" required>
+              <input type="text" placeholder="Message the room…" maxlength="300" required>
               <button type="submit" class="btn btn-gold btn-sm">Send</button>
             </form>
           </div>
         </div>
-
-        <aside class="live-participants-panel">
+        <aside class="live-participants-panel live-participants-pro">
           <h3>Participants</h3>
-          <p class="live-participants-legend">
-            <span class="status-speaking">● Speaking</span>
-            <span class="status-live">● Mic on</span>
-            <span class="status-muted-host">● Muted</span>
-            <span class="status-connected">● Connected</span>
-          </p>
+          <div class="live-participants-legend">
+            <span class="status-speaking">Speaking</span>
+            <span class="status-live">Mic on</span>
+            <span class="status-muted-host">Muted</span>
+            <span class="status-connected">Online</span>
+          </div>
           <div id="live-participants-list" class="live-participants-list"></div>
         </aside>
       </div>
-
-      <div class="live-room-toolbar">
-        <button type="button" class="live-tool-btn" id="live-chat-toggle-mobile" title="Chat">💬</button>
-        <button type="button" class="live-tool-btn mic-tool" id="live-mic-btn" title="Turn microphone on or off">
+      <footer class="live-room-toolbar live-room-toolbar-pro">
+        <button type="button" class="live-tool-btn live-tool-icon" id="live-chat-toggle-mobile" title="Chat">💬</button>
+        <button type="button" class="live-tool-btn mic-tool live-tool-mic" id="live-mic-btn" title="Microphone">
           <span class="mic-icon">🎤</span>
           <span class="mic-label">Mic Off</span>
         </button>
-        <button type="button" class="live-tool-btn seat-tool" id="live-leave-seat-btn">Leave Seat</button>
-        <button type="button" class="live-tool-btn leave-tool" id="live-leave-btn">Leave</button>
-      </div>
+        <button type="button" class="live-tool-btn live-tool-text" id="live-leave-seat-btn">Leave Seat</button>
+        <button type="button" class="live-tool-btn live-tool-leave" id="live-leave-btn">Exit Room</button>
+      </footer>
     </div>
   `;
 }
