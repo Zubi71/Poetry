@@ -3996,9 +3996,15 @@ input:focus, select:focus, textarea:focus {
 /* ===== Admin Panel v2 (full sidebar layout) ===== */
 .admin-shell {
   display: flex;
-  min-height: 100vh;
+  height: 100vh;
+  max-height: 100vh;
+  overflow: hidden;
   background: #0a0a0a;
   color: var(--text-primary);
+}
+
+body:has(.admin-shell) {
+  overflow: hidden;
 }
 
 .admin-sidebar {
@@ -4009,10 +4015,13 @@ input:focus, select:focus, textarea:focus {
   display: flex;
   flex-direction: column;
   padding: 16px 12px;
-  position: sticky;
+  position: fixed;
+  left: 0;
   top: 0;
+  bottom: 0;
   height: 100vh;
   overflow-y: auto;
+  z-index: 200;
 }
 
 .admin-brand {
@@ -4094,8 +4103,11 @@ input:focus, select:focus, textarea:focus {
 .admin-main {
   flex: 1;
   min-width: 0;
+  margin-left: 240px;
+  height: 100vh;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .admin-topbar {
@@ -4107,6 +4119,10 @@ input:focus, select:focus, textarea:focus {
   border-bottom: 1px solid var(--border);
   background: #111;
   flex-wrap: wrap;
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  z-index: 100;
 }
 
 .admin-topbar-search {
@@ -4174,7 +4190,9 @@ input:focus, select:focus, textarea:focus {
 .admin-content {
   padding: 24px;
   flex: 1;
+  min-height: 0;
   overflow-x: auto;
+  overflow-y: auto;
 }
 
 .admin-page-head h1 {
@@ -4473,11 +4491,21 @@ input:focus, select:focus, textarea:focus {
 }
 
 @media (max-width: 768px) {
-  .admin-shell { flex-direction: column; }
+  body:has(.admin-shell) { overflow: auto; }
+
+  .admin-shell {
+    flex-direction: column;
+    height: auto;
+    max-height: none;
+    overflow: visible;
+  }
   .admin-sidebar {
     width: 100%;
     height: auto;
     position: relative;
+    left: auto;
+    top: auto;
+    bottom: auto;
     flex-direction: row;
     flex-wrap: wrap;
     padding: 12px;
@@ -4489,7 +4517,16 @@ input:focus, select:focus, textarea:focus {
   }
   .admin-nav-link { flex: 1 1 auto; min-width: 120px; }
   .admin-back-site { width: 100%; }
-  .admin-content { padding: 16px; }
+  .admin-main {
+    margin-left: 0;
+    height: auto;
+    overflow: visible;
+  }
+  .admin-content {
+    overflow: visible;
+    min-height: auto;
+    padding: 16px;
+  }
   .admin-stats-row { grid-template-columns: 1fr; }
 }
 
