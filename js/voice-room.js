@@ -33,7 +33,7 @@ const VoiceRoomLive = {
       this._initLocalFallback();
     }
 
-    this._appendSystemMessage(`Welcome to ${meta.title}! Tap an empty seat to join the stage.`);
+    this._appendSystemMessage(`Welcome to ${meta.title}! Tap an empty seat, then turn on your mic to speak.`);
   },
 
   destroy() {
@@ -79,12 +79,14 @@ const VoiceRoomLive = {
     this.channel
       .on('presence', { event: 'sync' }, () => {
         this.presenceState = this.channel.presenceState();
+        this._syncMySlotFromPresence();
         this._renderSlots();
         this._updateParticipantCount();
         this._syncVoiceConnections();
       })
       .on('presence', { event: 'join' }, ({ key, newPresences }) => {
         this.presenceState = this.channel.presenceState();
+        this._syncMySlotFromPresence();
         this._renderSlots();
         this._updateParticipantCount();
         const name = newPresences?.[0]?.name;
@@ -95,6 +97,7 @@ const VoiceRoomLive = {
       })
       .on('presence', { event: 'leave' }, () => {
         this.presenceState = this.channel.presenceState();
+        this._syncMySlotFromPresence();
         this._renderSlots();
         this._updateParticipantCount();
         this._syncVoiceConnections();
@@ -166,6 +169,7 @@ const VoiceRoomLive = {
     Object.entries(users || {}).forEach(([id, data]) => {
       this.presenceState[id] = [{ ...data }];
     });
+    this._syncMySlotFromPresence();
     this._renderSlots();
   },
 
@@ -183,6 +187,32 @@ const VoiceRoomLive = {
     return this._getAllParticipants().find(p => p.slot === slot);
   },
 
+  _syncMySlotFromPresence() {
+    const user = Auth.getCurrentUser();
+    const me = this._getAllParticipants().find(p => p.userId === user?.id);
+    if (me?.slot) this.mySlot = me.slot;
+  },
+
+  _updateMicUI() {
+    const btn = document.getElementById('live-mic-btn');
+    const label = btn?.querySelector('.mic-label');
+    const icon = btn?.querySelector('.mic-icon');
+    if (btn) btn.classList.toggle('active', this.micOn);
+    if (label) label.textContent = this.micOn ? 'Mic On' : 'Mic Off';
+    if (icon) icon.textContent = this.micOn ? '🎙️' : '🎤';
+
+    const prompt = document.getElementById('live-mic-prompt');
+    if (prompt) {
+      if (this.mySlot && !this.micOn) {
+        prompt.hidden = false;
+        prompt.querySelector('.live-mic-prompt-text').textContent =
+          `You're on seat ${this.mySlot}. Tap the mic button below to speak.`;
+      } else {
+        prompt.hidden = true;
+      }
+    }
+  },
+
   _renderSlots() {
     const grid = document.getElementById('live-room-slots');
     if (!grid) return;
@@ -196,14 +226,21 @@ const VoiceRoomLive = {
       const micOn = occupant?.micOn;
 
       if (occupant) {
+        const micBtn = isMe ? `
+          <button type="button" class="live-slot-mic ${micOn ? 'on' : 'off'} mic-toggle-btn" data-action="mic" aria-label="${micOn ? 'Turn off microphone' : 'Turn on microphone'}">
+            ${micOn ? '🎙️' : '🔇'}
+          </button>
+        ` : `<span class="live-slot-mic ${micOn ? 'on' : 'off'}" aria-hidden="true">${micOn ? '🎙️' : '🔇'}</span>`;
+
         return `
           <button type="button" class="live-slot occupied ${isMe ? 'me' : ''} ${micOn ? 'speaking' : ''}" data-slot="${slot}" aria-label="Seat ${slot}">
             <div class="live-slot-avatar-wrap">
               ${avatarImg(occupant.name, 'live-slot-avatar', occupant.name)}
-              ${micOn ? '<span class="live-slot-mic on">🎙️</span>' : '<span class="live-slot-mic off">🔇</span>'}
+              ${micBtn}
             </div>
             <span class="live-slot-name">${isMe ? 'You' : (occupant.name || '').split(' ')[0]}</span>
             ${occupant.isHost ? '<span class="live-slot-badge">Host</span>' : ''}
+            ${isMe && !micOn ? '<span class="live-slot-hint">Tap to speak</span>' : ''}
           </button>
         `;
       }
@@ -216,8 +253,17 @@ const VoiceRoomLive = {
     }).join('');
 
     grid.querySelectorAll('.live-slot').forEach(btn => {
-      btn.onclick = () => this._handleSlotClick(parseInt(btn.dataset.slot, 10));
+      btn.onclick = (e) => {
+        if (e.target.closest('.mic-toggle-btn')) {
+          e.stopPropagation();
+          this.toggleMic();
+          return;
+        }
+        this._handleSlotClick(parseInt(btn.dataset.slot, 10));
+      };
     });
+
+    this._updateMicUI();
   },
 
   async _handleSlotClick(slot) {
@@ -229,16 +275,16 @@ const VoiceRoomLive = {
       return;
     }
 
-    if (this.mySlot === slot) {
-      this.mySlot = null;
-      await this._stopMic();
-    } else {
-      if (this.mySlot) await this._updateMySlot(null);
-      this.mySlot = slot;
+    if (occupant && occupant.userId === user.id) {
+      await this.toggleMic();
+      return;
     }
+
+    if (this.mySlot) await this._updateMySlot(null);
+    this.mySlot = slot;
     await this._updateMySlot(this.mySlot);
     this._renderSlots();
-    Components.showToast(this.mySlot ? `You joined seat ${slot}` : 'You left the stage');
+    Components.showToast(`Seat ${slot} — tap Mic Off below or your avatar to turn on your microphone`);
   },
 
   async _updateMySlot(slot) {
@@ -264,6 +310,8 @@ const VoiceRoomLive = {
 
   _bindControls() {
     document.getElementById('live-mic-btn')?.addEventListener('click', () => this.toggleMic());
+    document.getElementById('live-mic-prompt-btn')?.addEventListener('click', () => this.toggleMic());
+    document.getElementById('live-leave-seat-btn')?.addEventListener('click', () => this._leaveSeat());
     document.getElementById('live-leave-btn')?.addEventListener('click', () => {
       this.destroy();
       if (this.roomMeta.leavePath) Router.go(this.roomMeta.leavePath);
@@ -287,30 +335,39 @@ const VoiceRoomLive = {
   },
 
   async toggleMic() {
-    const btn = document.getElementById('live-mic-btn');
     if (this.micOn) {
       await this._stopMic();
-      btn?.classList.remove('active');
       Components.showToast('Microphone off');
       return;
     }
 
     if (!this.mySlot) {
-      Components.showToast('Join a seat first to speak', 'error');
+      Components.showToast('Join a seat first — tap an empty 🎤 seat', 'error');
       return;
     }
 
     try {
       this.localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
       this.micOn = true;
-      btn?.classList.add('active');
       await this._updateMySlot(this.mySlot);
       this._renderSlots();
       this._syncVoiceConnections();
       Components.showToast('Microphone on — you can speak now');
     } catch {
-      Components.showToast('Microphone access denied', 'error');
+      Components.showToast('Microphone blocked — allow mic access in your browser settings', 'error');
     }
+  },
+
+  async _leaveSeat() {
+    if (!this.mySlot) {
+      Components.showToast('You are not on a seat', 'error');
+      return;
+    }
+    await this._stopMic();
+    this.mySlot = null;
+    await this._updateMySlot(null);
+    this._renderSlots();
+    Components.showToast('You left the stage');
   },
 
   async _stopMic() {
@@ -323,7 +380,6 @@ const VoiceRoomLive = {
     this.peers.clear();
     this.remoteAudios.forEach(el => el.remove());
     this.remoteAudios.clear();
-    document.getElementById('live-mic-btn')?.classList.remove('active');
     if (this.mySlot) await this._updateMySlot(this.mySlot);
     this._renderSlots();
   },
@@ -493,6 +549,10 @@ function renderLiveRoomView(meta) {
 
       <div class="live-room-body">
         <div class="live-room-stage-wrap">
+          <div id="live-mic-prompt" class="live-mic-prompt" hidden>
+            <span class="live-mic-prompt-text">Turn on your microphone to speak</span>
+            <button type="button" class="btn btn-gold btn-sm" id="live-mic-prompt-btn">Turn On Mic</button>
+          </div>
           <div class="live-room-stage">
             <div class="live-room-slots" id="live-room-slots"></div>
           </div>
@@ -513,8 +573,12 @@ function renderLiveRoomView(meta) {
 
       <div class="live-room-toolbar">
         <button type="button" class="live-tool-btn" id="live-chat-toggle-mobile" title="Chat">💬</button>
-        <button type="button" class="live-tool-btn mic-tool" id="live-mic-btn" title="Toggle mic">🎤</button>
-        <button type="button" class="live-tool-btn leave-tool" id="live-leave-btn" title="Leave">Leave</button>
+        <button type="button" class="live-tool-btn mic-tool" id="live-mic-btn" title="Turn microphone on or off">
+          <span class="mic-icon">🎤</span>
+          <span class="mic-label">Mic Off</span>
+        </button>
+        <button type="button" class="live-tool-btn seat-tool" id="live-leave-seat-btn" title="Leave your seat">Leave Seat</button>
+        <button type="button" class="live-tool-btn leave-tool" id="live-leave-btn" title="Leave room">Leave</button>
       </div>
     </div>
   `;
