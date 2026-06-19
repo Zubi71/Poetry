@@ -288,6 +288,12 @@ const Storage = {
     return event;
   },
 
+  removeCustomMushaira(id) {
+    const pid = parseInt(id, 10);
+    const events = this.getCustomMushaira().filter(e => e.id !== pid);
+    this.set(this.KEYS.CUSTOM_MUSHAIRA, events);
+  },
+
   getRoomMessages(roomId) {
     const rid = parseInt(roomId);
     const saved = this.get(this.KEYS.ROOM_MESSAGES, {});

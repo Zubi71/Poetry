@@ -764,6 +764,8 @@ const App = {
         title: liveRoom.dataset.roomTitle,
         host: liveRoom.dataset.roomHost,
         hostOwnerId: liveRoom.dataset.hostOwnerId || null,
+        eventId: liveRoom.dataset.eventId ? parseInt(liveRoom.dataset.eventId, 10) : null,
+        roomType: liveRoom.dataset.roomType || null,
         maxSeats: parseInt(liveRoom.dataset.maxSeats, 10) || undefined,
         leavePath: liveRoom.dataset.leavePath || '/voice-rooms'
       });

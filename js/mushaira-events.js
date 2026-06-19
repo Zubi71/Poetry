@@ -37,6 +37,12 @@ const MushairaEvents = {
         this.renderLists();
         this.updateLiveUI();
       })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'mushaira_events' }, (payload) => {
+        const id = payload.old?.id;
+        if (!id) return;
+        this.removeFromList(id);
+        this._handleEventDeletedOnLivePage(id);
+      })
       .subscribe();
 
     this._startGlobalPoll();
@@ -138,6 +144,23 @@ const MushairaEvents = {
     this.updateHomeStrip();
     this.updateSidebar();
     this.updateNavBadge();
+  },
+
+  removeFromList(eventId) {
+    const id = parseInt(eventId, 10);
+    window.REMOTE_MUSHAIRA_EVENTS = (window.REMOTE_MUSHAIRA_EVENTS || []).filter(e => e.id !== id);
+    Storage.removeCustomMushaira(id);
+    this.renderLists();
+    this.updateLiveUI();
+  },
+
+  _handleEventDeletedOnLivePage(eventId) {
+    const hash = location.hash || '';
+    const match = hash.match(/\/mushaira\/live\/(\d+)/);
+    if (!match || parseInt(match[1], 10) !== parseInt(eventId, 10)) return;
+    Components.showToast('This mushaira has ended', 'info');
+    if (typeof VoiceRoomLive !== 'undefined') VoiceRoomLive.destroy();
+    Router.go('/mushaira');
   },
 
   updateSidebar() {
@@ -290,6 +313,8 @@ const MushairaEvents = {
       title: event.title,
       host: event.host,
       hostOwnerId: event.ownerId || '',
+      eventId: event.id,
+      roomType: 'mushaira',
       maxSeats: LIVE_ROOM.MUSHAIRA_SEATS,
       backPath: '#/mushaira',
       leavePath: '/mushaira'
@@ -303,6 +328,8 @@ const MushairaEvents = {
         title: liveRoom.dataset.roomTitle,
         host: liveRoom.dataset.roomHost,
         hostOwnerId: liveRoom.dataset.hostOwnerId || null,
+        eventId: parseInt(liveRoom.dataset.eventId, 10) || event.id,
+        roomType: liveRoom.dataset.roomType || 'mushaira',
         maxSeats: parseInt(liveRoom.dataset.maxSeats, 10) || LIVE_ROOM.MUSHAIRA_SEATS,
         leavePath: liveRoom.dataset.leavePath || '/mushaira'
       });

@@ -725,6 +725,27 @@ const API = {
     return this.mapMushairaEvent(data);
   },
 
+  async deleteMushairaEvent(id) {
+    const sb = SupabaseClient.get();
+    const user = Auth.getCurrentUser();
+    if (!sb || !user?.id || user.isGuest) return false;
+
+    const eventId = parseInt(id, 10);
+    if (!eventId) return false;
+
+    const { error } = await sb
+      .from('mushaira_events')
+      .delete()
+      .eq('id', eventId)
+      .eq('user_id', user.id);
+
+    if (error) {
+      console.warn('deleteMushairaEvent:', error.message);
+      return false;
+    }
+    return true;
+  },
+
   async fetchVoiceRooms() {
     const sb = SupabaseClient.get();
     if (!sb) return null;

@@ -167,6 +167,9 @@ const VoiceRoomLive = {
       .on('broadcast', { event: 'host_action' }, ({ payload }) => {
         if (payload) this._handleHostAction(payload);
       })
+      .on('broadcast', { event: 'event_ended' }, ({ payload }) => {
+        if (payload) this._handleEventEnded(payload);
+      })
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') await this._trackPresence();
       });
@@ -322,7 +325,12 @@ const VoiceRoomLive = {
 
   _updateHostPanelVisibility() {
     const panel = document.getElementById('live-host-panel');
-    if (panel) panel.hidden = !this._isHost();
+    const endBtn = document.getElementById('live-end-event-btn');
+    const isHost = this._isHost();
+    const isMushaira = this.roomMeta?.roomType === 'mushaira' && this.roomMeta?.eventId;
+
+    if (panel) panel.hidden = !isHost;
+    if (endBtn) endBtn.hidden = !(isHost && isMushaira);
   },
 
   _updateSeatStats() {
@@ -506,6 +514,7 @@ const VoiceRoomLive = {
       this.destroy();
       Router.go(this.roomMeta.leavePath || '/voice-rooms');
     });
+    document.getElementById('live-end-event-btn')?.addEventListener('click', () => this._confirmEndMushairaEvent());
 
     const form = document.getElementById('live-room-chat-form');
     form?.addEventListener('submit', (e) => {
@@ -870,6 +879,76 @@ const VoiceRoomLive = {
     }
   },
 
+  _confirmEndMushairaEvent() {
+    if (!this._isHost()) {
+      Components.showToast('Only the host can end this event', 'error');
+      return;
+    }
+    if (this.roomMeta?.roomType !== 'mushaira' || !this.roomMeta?.eventId) return;
+
+    Components.showModal(
+      'End Mushaira Event?',
+      '<p class="live-end-event-copy">This will close the live room and delete the event for everyone. This cannot be undone.</p>',
+      '<button type="button" class="btn btn-ghost" id="end-event-cancel">Cancel</button><button type="button" class="live-end-event-btn" id="end-event-confirm">End Event</button>'
+    );
+    document.getElementById('end-event-cancel')?.addEventListener('click', () => Components.closeModal());
+    document.getElementById('end-event-confirm')?.addEventListener('click', () => {
+      Components.closeModal();
+      this._performEndMushairaEvent();
+    });
+  },
+
+  async _performEndMushairaEvent() {
+    const eventId = this.roomMeta?.eventId;
+    if (!eventId || !this._isHost()) return;
+
+    const payload = {
+      eventId,
+      message: 'The host ended this mushaira.'
+    };
+
+    if (this.channel) {
+      try {
+        this.channel.send({ type: 'broadcast', event: 'event_ended', payload });
+      } catch (_) {}
+    }
+
+    let deleted = true;
+    if (SupabaseClient.isEnabled()) {
+      deleted = await API.deleteMushairaEvent(eventId);
+    } else {
+      Storage.removeCustomMushaira(eventId);
+    }
+
+    if (!deleted) {
+      Components.showToast('Could not end event. Please try again.', 'error');
+      return;
+    }
+
+    if (typeof MushairaEvents !== 'undefined') {
+      MushairaEvents.removeFromList(eventId);
+    } else {
+      window.REMOTE_MUSHAIRA_EVENTS = (window.REMOTE_MUSHAIRA_EVENTS || []).filter(
+        e => e.id !== parseInt(eventId, 10)
+      );
+    }
+
+    Components.showToast('Mushaira event ended', 'success');
+    this.destroy();
+    Router.go(this.roomMeta.leavePath || '/mushaira');
+  },
+
+  _handleEventEnded(payload) {
+    if (!payload?.eventId || !this.roomMeta?.eventId) return;
+    if (parseInt(payload.eventId, 10) !== parseInt(this.roomMeta.eventId, 10)) return;
+
+    Components.showToast(payload.message || 'This mushaira has ended', 'info');
+    setTimeout(() => {
+      this.destroy();
+      Router.go(this.roomMeta?.leavePath || '/mushaira');
+    }, 1200);
+  },
+
   async _applyHostMute(muted, updatePresence = true) {
     this.mutedByHost = muted;
     if (muted && this.micOn) await this._stopMicTracks();
@@ -967,6 +1046,8 @@ function renderLiveRoomView(meta) {
       data-room-host="${(meta.host || '').replace(/"/g, '&quot;')}"
       data-room-id="${meta.roomId || ''}"
       data-host-owner-id="${meta.hostOwnerId || ''}"
+      data-room-type="${meta.roomType || ''}"
+      data-event-id="${meta.eventId || ''}"
       data-max-seats="${maxSeats}"
       data-leave-path="${meta.leavePath || '/voice-rooms'}">
 
@@ -988,6 +1069,7 @@ function renderLiveRoomView(meta) {
       <div id="live-host-panel" class="live-host-panel" hidden>
         <span class="live-host-badge">Host</span>
         <span class="live-host-hint">Tap participants to manage</span>
+        <button type="button" class="live-end-event-btn" id="live-end-event-btn" hidden>End Event</button>
       </div>
 
       <div id="live-mic-prompt" class="live-v2-notice" hidden>
