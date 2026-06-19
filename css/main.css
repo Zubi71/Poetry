@@ -4032,6 +4032,44 @@ body:has(.admin-shell) {
   color: var(--text-primary);
   font-weight: 700;
   font-size: 15px;
+  flex: 1;
+  min-width: 0;
+}
+
+.admin-sidebar-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.admin-sidebar-head .admin-brand {
+  padding-bottom: 8px;
+}
+
+.admin-sidebar-close,
+.admin-menu-btn,
+.admin-sidebar-backdrop {
+  display: none;
+}
+
+.admin-sidebar-close,
+.admin-menu-btn {
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  flex-shrink: 0;
+}
+
+.admin-sidebar-close svg,
+.admin-menu-btn svg {
+  width: 20px;
+  height: 20px;
 }
 
 .admin-brand img {
@@ -4490,43 +4528,179 @@ body:has(.admin-shell) {
   .admin-grid-2 { grid-template-columns: 1fr; }
 }
 
-@media (max-width: 768px) {
-  body:has(.admin-shell) { overflow: auto; }
+@media (max-width: 992px) {
+  body:has(.admin-shell) { overflow: hidden; }
 
   .admin-shell {
-    flex-direction: column;
-    height: auto;
-    max-height: none;
-    overflow: visible;
+    flex-direction: row;
+    height: 100vh;
+    max-height: 100vh;
+    overflow: hidden;
   }
+
+  .admin-sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    z-index: 250;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease;
+  }
+
+  .admin-shell.admin-nav-open .admin-sidebar-backdrop {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
   .admin-sidebar {
-    width: 100%;
-    height: auto;
-    position: relative;
-    left: auto;
-    top: auto;
-    bottom: auto;
-    flex-direction: row;
-    flex-wrap: wrap;
-    padding: 12px;
+    width: min(280px, 86vw);
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    z-index: 300;
+    box-shadow: none;
   }
-  .admin-nav {
-    flex-direction: row;
-    flex-wrap: wrap;
-    width: 100%;
+
+  .admin-shell.admin-nav-open .admin-sidebar {
+    transform: translateX(0);
+    box-shadow: 8px 0 32px rgba(0, 0, 0, 0.45);
   }
-  .admin-nav-link { flex: 1 1 auto; min-width: 120px; }
-  .admin-back-site { width: 100%; }
+
+  .admin-sidebar-close,
+  .admin-menu-btn {
+    display: inline-flex;
+  }
+
   .admin-main {
     margin-left: 0;
-    height: auto;
-    overflow: visible;
+    width: 100%;
+    height: 100vh;
+    overflow: hidden;
   }
+
+  .admin-topbar {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    grid-template-areas:
+      "menu actions actions"
+      "search search search";
+    gap: 10px;
+    padding: 12px;
+    align-items: center;
+  }
+
+  .admin-menu-btn { grid-area: menu; }
+
+  .admin-topbar-search {
+    grid-area: search;
+    max-width: none;
+    width: 100%;
+  }
+
+  .admin-topbar-actions {
+    grid-area: actions;
+    justify-self: end;
+    gap: 8px;
+  }
+
+  .admin-topbar-actions .admin-upgrade-btn { display: none; }
+
+  .admin-user-chip span {
+    display: none;
+  }
+
   .admin-content {
-    overflow: visible;
-    min-height: auto;
+    padding: 16px 12px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .admin-page-head h1 {
+    font-size: 18px;
+    margin-bottom: 14px;
+  }
+
+  .admin-stat-value { font-size: 22px; }
+
+  .admin-card {
     padding: 16px;
   }
+
+  .admin-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .admin-filter-input,
+  .admin-filter-select {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .admin-user-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .admin-user-info {
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .admin-role-select {
+    width: 100%;
+  }
+
+  .admin-table {
+    min-width: 560px;
+  }
+
+  .admin-table-wrap {
+    margin: 0 -12px;
+    padding: 0 12px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .admin-poem-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-nav {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    width: 100%;
+  }
+
+  .admin-nav-link {
+    min-width: 0;
+    flex: none;
+  }
+
+  .admin-tag-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .admin-tag-row .tag-en-input {
+    width: 100%;
+  }
+
+  .admin-actions {
+    flex-direction: column;
+  }
+
+  .admin-actions .btn {
+    width: 100%;
+  }
+}
+
+@media (max-width: 768px) {
   .admin-stats-row { grid-template-columns: 1fr; }
 }
 
