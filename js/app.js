@@ -739,6 +739,8 @@ const App = {
         roomId: liveRoom.dataset.roomId,
         title: liveRoom.dataset.roomTitle,
         host: liveRoom.dataset.roomHost,
+        hostOwnerId: liveRoom.dataset.hostOwnerId || null,
+        maxSeats: parseInt(liveRoom.dataset.maxSeats, 10) || undefined,
         leavePath: liveRoom.dataset.leavePath || '/voice-rooms'
       });
       document.getElementById('live-chat-toggle-mobile')?.addEventListener('click', () => {

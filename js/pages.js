@@ -396,6 +396,8 @@ const Pages = {
         roomId: roomId,
         title: room.title,
         host: room.host,
+        hostOwnerId: room.ownerId || '',
+        maxSeats: LIVE_ROOM.VOICE_ROOM_SEATS,
         backPath: '#/voice-rooms',
         leavePath: '/voice-rooms'
       });

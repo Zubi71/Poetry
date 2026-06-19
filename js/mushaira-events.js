@@ -286,9 +286,11 @@ const MushairaEvents = {
 
     mount.outerHTML = renderLiveRoomView({
       roomKey: `mushaira-${event.id}`,
-      roomId: `M-${event.id}${String(Date.now()).slice(-4)}`,
+      roomId: `M-${event.id}`,
       title: event.title,
       host: event.host,
+      hostOwnerId: event.ownerId || '',
+      maxSeats: LIVE_ROOM.MUSHAIRA_SEATS,
       backPath: '#/mushaira',
       leavePath: '/mushaira'
     });
@@ -300,6 +302,8 @@ const MushairaEvents = {
         roomId: liveRoom.dataset.roomId,
         title: liveRoom.dataset.roomTitle,
         host: liveRoom.dataset.roomHost,
+        hostOwnerId: liveRoom.dataset.hostOwnerId || null,
+        maxSeats: parseInt(liveRoom.dataset.maxSeats, 10) || LIVE_ROOM.MUSHAIRA_SEATS,
         leavePath: liveRoom.dataset.leavePath || '/mushaira'
       });
     }
