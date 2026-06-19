@@ -124,6 +124,17 @@ const Auth = {
     }
   },
 
+  async loginAdmin(emailOrUsername, password) {
+    const result = await this.login(emailOrUsername, password);
+    if (!result.success) return result;
+    if (!this.isAdmin()) {
+      await this.logout();
+      this.loginAsGuest();
+      return { success: false, error: 'Access denied. This account is not authorized for admin.' };
+    }
+    return result;
+  },
+
   async login(emailOrUsername, password) {
     if (this.isSupabase()) {
       try {

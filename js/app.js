@@ -434,6 +434,31 @@ const App = {
     }
 
     // Auth forms
+    const adminLoginForm = document.getElementById('admin-login-form');
+    if (adminLoginForm) {
+      adminLoginForm.onsubmit = async (e) => {
+        e.preventDefault();
+        const data = new FormData(adminLoginForm);
+        const btn = adminLoginForm.querySelector('[type="submit"]');
+        if (btn) { btn.disabled = true; btn.textContent = 'Signing in...'; }
+
+        if (Auth.isLoggedIn() && !Auth.isAdmin()) {
+          await Auth.logout();
+        }
+
+        const result = await Auth.loginAdmin(data.get('email'), data.get('password'));
+        if (btn) { btn.disabled = false; btn.textContent = 'Sign In to Admin Panel'; }
+        if (result.success) {
+          await loadRemoteData();
+          Components.showToast('Welcome, Admin!');
+          const section = adminLoginForm.dataset.section || 'dashboard';
+          Router.go(section === 'dashboard' ? '/admin' : `/admin?section=${section}`);
+        } else {
+          Components.showToast(result.error, 'error');
+        }
+      };
+    }
+
     const loginForm = document.getElementById('login-form');
     if (loginForm) {
       loginForm.onsubmit = async (e) => {

@@ -945,15 +945,48 @@ const Pages = {
     return Components.renderAppLayout(content);
   },
 
-  admin() {
-    if (!Auth.isAdmin()) {
-      return Components.renderAppLayout(`
-        <div class="empty-state">
-          <h2>Admin Access Required</h2>
-          <p>You must be logged in as an admin to access this panel.</p>
-          <a href="#/login" class="btn btn-gold">Login</a>
+  adminLogin(params, query) {
+    if (Auth.isAdmin()) {
+      setTimeout(() => Router.go(query.section ? `/admin?section=${query.section}` : '/admin'), 0);
+      return '<div class="admin-auth-page"><p class="admin-auth-redirect">Opening admin dashboard…</p></div>';
+    }
+
+    const section = query.section || 'dashboard';
+    const loggedInNonAdmin = Auth.isLoggedIn() && !Auth.isAdmin();
+
+    return `
+      <div class="admin-auth-page">
+        <div class="admin-auth-card">
+          <a href="#/" class="admin-auth-back">← Back to Site</a>
+          <div class="admin-auth-brand">
+            <img src="${APP_DATA.logo}" alt="Urdu Poetry">
+            <span>Urdu Poetry</span>
+          </div>
+          <div class="admin-auth-icon">🛡️</div>
+          <h1>Admin Portal</h1>
+          <p class="admin-auth-subtitle">Sign in with your administrator account to access the control panel.</p>
+          ${loggedInNonAdmin ? '<p class="admin-auth-warn">You are signed in as a regular user. Enter admin credentials to continue.</p>' : ''}
+          <form id="admin-login-form" class="admin-auth-form" data-section="${section}">
+            <label for="admin-email">Email address</label>
+            <input id="admin-email" type="email" name="email" required placeholder="admin@urdupoetry.com" autocomplete="username">
+            <label for="admin-password">Password</label>
+            <div class="password-field">
+              <input id="admin-password" type="password" name="password" required placeholder="Enter password" autocomplete="current-password">
+              <button type="button" class="password-toggle" aria-label="Show password">${Components.icon('eye')}</button>
+            </div>
+            <button type="submit" class="btn btn-gold btn-block admin-auth-submit">Sign In to Admin Panel</button>
+          </form>
+          <p class="admin-auth-foot">Authorized personnel only. All actions are logged.</p>
         </div>
-      `);
+      </div>
+    `;
+  },
+
+  admin(params, query) {
+    if (!Auth.isAdmin()) {
+      const dest = query.section ? `/admin/login?section=${encodeURIComponent(query.section)}` : '/admin/login';
+      setTimeout(() => Router.go(dest), 0);
+      return '<div class="admin-auth-page"><p class="admin-auth-redirect">Redirecting to admin login…</p></div>';
     }
     const section = query.section || 'dashboard';
     return AdminPanel.render(section);
