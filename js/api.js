@@ -222,11 +222,13 @@ const API = {
       p_conversation_id: null
     });
 
-    if (error) {
-      console.warn('notifyPostOwner:', error.message);
-      return false;
+    if (error) console.warn('notifyPostOwner:', error.message);
+
+    if (typeof Realtime !== 'undefined') {
+      await Realtime.broadcastUserNotification(poem.user_id, { type, text, poemId });
     }
-    return true;
+
+    return !error;
   },
 
   async toggleLike(poemId) {
@@ -240,6 +242,7 @@ const API = {
     const { data: existing } = await sb.from('likes').select('*').eq('user_id', user.id).eq('poem_id', poemId).maybeSingle();
     if (existing) {
       await sb.from('likes').delete().eq('user_id', user.id).eq('poem_id', poemId);
+      if (typeof Realtime !== 'undefined') await Realtime.broadcastPoemUpdate(poemId, { type: 'unlike' });
       return false;
     }
     const { error } = await sb.from('likes').insert({ user_id: user.id, poem_id: poemId });
@@ -248,6 +251,7 @@ const API = {
       return null;
     }
     await this.notifyPostOwner(poemId, 'like');
+    if (typeof Realtime !== 'undefined') await Realtime.broadcastPoemUpdate(poemId, { type: 'like' });
     return true;
   },
 
@@ -441,6 +445,7 @@ const API = {
       return null;
     }
     await this.notifyPostOwner(poemId, 'comment');
+    if (typeof Realtime !== 'undefined') await Realtime.broadcastPoemUpdate(poemId, { type: 'comment' });
     const profile = await this.getProfile(user.id);
     return this.mapComment(data, profile);
   },

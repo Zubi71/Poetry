@@ -21,6 +21,9 @@ const SupabaseClient = {
         flowType: 'pkce',
         detectSessionInUrl: true,
         persistSession: true
+      },
+      realtime: {
+        params: { eventsPerSecond: 20 }
       }
     });
     this.ready = true;

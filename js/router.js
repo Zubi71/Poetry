@@ -108,6 +108,7 @@ const Router = {
         document.title = this.getPageTitle(match.route.handler) + ' - Urdu Poetry';
         app.innerHTML = handler(match.params, query);
         App.bindEvents();
+        if (typeof Realtime !== 'undefined') Realtime.updateNotificationBadge();
         window.scrollTo(0, 0);
         return;
       }

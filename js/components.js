@@ -216,7 +216,7 @@ const Components = {
     const bookmarked = Storage.isBookmarked(poem.id);
     const theme = poem.cardTheme || 'classic-dark';
     const tagLabel = poem.tagLabel || (category ? category.name : poem.category);
-    const likeCount = this.formatNumber(poem.likes + (liked ? 1 : 0));
+    const likeCount = this.formatNumber(poem.likes || 0);
     return `
       <article class="poem-card poem-card-v2 poem-card-${theme}" data-poem-id="${poem.id}">
         <div class="poem-card-header">

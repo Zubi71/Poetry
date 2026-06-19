@@ -105,7 +105,10 @@ const App = {
           }
           Storage.set(Storage.KEYS.LIKES, await API.getUserLikes());
           const counts = await API.getPoemCounts(id);
-          if (counts) Realtime.updateLikeButton(id, liked, counts.likes);
+          if (counts) {
+            Realtime.updatePoemCounts(id, counts.likes, counts.comments);
+            if (liked) await Realtime.broadcastPoemUpdate(id, { type: 'like', likes: counts.likes, comments: counts.comments });
+          }
         } else {
           liked = Storage.toggleLike(id);
           document.querySelectorAll(`[data-action="like"][data-id="${id}"]`).forEach(b => {
@@ -389,6 +392,8 @@ const App = {
           tempEl.dataset.commentId = comment.id;
           tempEl.querySelector('.comment-time').textContent = comment.time;
         }
+        Realtime._knownCommentIds.add(String(comment.id));
+        await Realtime.broadcastPoemUpdate(poemId, { type: 'comment' });
         Storage.incrementAnalytics('comments');
       };
     }

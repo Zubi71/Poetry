@@ -216,7 +216,7 @@ const Pages = {
     const tagLabel = poem.tagLabel || (category ? category.name : poem.category);
 
     const content = `
-      <div class="poem-detail">
+      <div class="poem-detail" data-poem-id="${poem.id}">
         <a href="#/poems" class="back-link">${Components.icon('back')} Back to Poems</a>
         <div class="poem-detail-header">
           <a href="${poet ? `#/poet/${poem.poetId}` : '#/dashboard'}" class="poet-info">
@@ -237,7 +237,7 @@ const Pages = {
         </div>
         <div class="poem-actions poem-actions-bar">
           <button class="action-btn like-btn ${liked ? 'active' : ''}" data-action="like" data-id="${poem.id}">
-            ${Components.icon('heart')} <span>${Components.formatNumber(poem.likes + (liked ? 1 : 0))}</span>
+            ${Components.icon('heart')} <span>${Components.formatNumber(poem.likes || 0)}</span>
           </button>
           <span class="action-divider"></span>
           <span class="action-btn comment-count">${Components.icon('comment')} <span>${poem.comments}</span></span>
