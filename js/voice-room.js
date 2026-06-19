@@ -356,8 +356,10 @@ const VoiceRoomLive = {
             ${avatarImg(occupant.name, 'live-slot-avatar', occupant.name)}
             ${micBtn}
           </div>
-          <span class="live-slot-name">${isMe ? 'You' : (occupant.name || '').split(' ')[0]}</span>
-          ${occupant.isHost ? '<span class="live-slot-badge">Host</span>' : ''}
+          <div class="live-slot-meta">
+            <span class="live-slot-name">${isMe ? 'You' : (occupant.name || '').split(' ')[0]}</span>
+            ${occupant.isHost ? '<span class="live-slot-badge">Host</span>' : ''}
+          </div>
         </button>
       `;
     }
@@ -365,7 +367,7 @@ const VoiceRoomLive = {
     return `
       <button type="button" class="live-slot empty size-${size}" data-slot="${slot}" title="Seat ${slot}">
         <div class="live-slot-empty-icon">${opts.compact ? slot : '+'}</div>
-        ${opts.compact ? '' : `<span class="live-slot-label">${slot}</span>`}
+        ${opts.compact ? '' : `<div class="live-slot-meta"><span class="live-slot-label">${slot}</span></div>`}
       </button>
     `;
   },

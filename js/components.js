@@ -338,7 +338,7 @@ const Components = {
         ${this.renderHeader()}
         ${liveRoom || !Auth.showAds() ? '' : this.renderAd('header')}
         ${liveRoom ? '' : '<div id="mushaira-live-banner-root"></div>'}
-        <div class="main-container ${fullWidth ? 'full-width' : ''} ${noSidebar ? 'no-sidebar live-main' : ''}">
+        <div class="main-container ${fullWidth ? 'full-width' : ''} ${noSidebar ? 'no-sidebar live-main' : ''}${liveRoom ? ' live-room-full' : ''}">
           ${noSidebar ? '' : this.renderSidebar()}
           <main class="main-content${liveRoom ? ' live-main-content' : ''}" id="main-content">${content}</main>
           ${noSidebar || fullWidth ? '' : this.renderRightSidebar()}
