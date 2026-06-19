@@ -51,7 +51,7 @@ const Components = {
       { path: '/categories', icon: 'categories', label: 'Categories' },
       { path: '/poets', icon: 'poets', label: 'Poets' },
       { path: '/top-poets', icon: 'contests', label: 'Top Poets' },
-      { path: '/mushaira', icon: 'events', label: 'Mushaira Events', badge: 'Live', badgeType: 'live' },
+      { path: '/mushaira', icon: 'events', label: 'Mushaira Events', badgeKey: 'mushaira-live' },
       { path: '/voice-rooms', icon: 'voice', label: 'Voice Rooms' },
       { path: '/contests', icon: 'contests', label: 'Contests', badge: 'New', badgeType: 'new' },
       { path: '/bookmarks', icon: 'bookmarks', label: 'Bookmarks' },
@@ -109,7 +109,10 @@ const Components = {
             <a href="#${link.path}" class="sidebar-link ${this.isActive(link.path.split('?')[0]) ? 'active' : ''}">
               <span class="sidebar-icon">${this.icon(link.icon)}</span>
               <span>${link.label}</span>
-              ${link.badge ? `<span class="nav-badge ${link.badgeType}">${link.badge}</span>` : ''}
+              ${link.badgeKey === 'mushaira-live' ? (() => {
+                const n = getLiveMushairaEvents().length;
+                return n ? `<span class="nav-badge live">${n === 1 ? 'Live' : n + ' Live'}</span>` : '';
+              })() : link.badge ? `<span class="nav-badge ${link.badgeType}">${link.badge}</span>` : ''}
             </a>
           `).join('')}
         </nav>
@@ -176,15 +179,16 @@ const Components = {
         </div>
         <div class="widget">
           <h3 class="widget-title">Mushaira Events</h3>
-          ${APP_DATA.mushairaEvents.slice(0, 2).map(event => `
-            <div class="event-widget-item">
-              ${event.live ? '<span class="live-badge">Live</span>' : ''}
-              <h4>${event.title}</h4>
-              <p>${event.date} · ${event.time}</p>
-              <p class="location">${event.location}</p>
-              <a href="#/mushaira" class="btn btn-gold btn-sm">${event.live ? 'Join Now' : 'Register'}</a>
-            </div>
-          `).join('')}
+          <div id="sidebar-mushaira-widget">
+            ${getAllMushairaEvents().filter(e => e.live).slice(0, 2).map(event => `
+              <div class="event-widget-item">
+                <span class="live-badge">Live</span>
+                <h4>${event.title}</h4>
+                <p>${event.date} · ${event.host}</p>
+                <a href="#/mushaira/live/${event.id}" class="btn btn-gold btn-sm">Join Live</a>
+              </div>
+            `).join('') || '<p class="empty-state">No live events right now.</p>'}
+          </div>
         </div>
       </aside>
     `;
@@ -333,6 +337,7 @@ const Components = {
       <div class="app-layout">
         ${this.renderHeader()}
         ${Auth.showAds() ? this.renderAd('header') : ''}
+        <div id="mushaira-live-banner-root"></div>
         <div class="main-container ${fullWidth ? 'full-width' : ''} ${noSidebar ? 'no-sidebar' : ''}">
           ${noSidebar ? '' : this.renderSidebar()}
           <main class="main-content" id="main-content">${content}</main>
@@ -356,6 +361,23 @@ const Components = {
       toast.classList.remove('show');
       setTimeout(() => toast.remove(), 300);
     }, 3000);
+  },
+
+  showLiveToast(message, joinHref) {
+    const root = document.getElementById('toast-root');
+    const toast = document.createElement('div');
+    toast.className = 'toast toast-live';
+    toast.innerHTML = `
+      <span class="toast-live-dot">●</span>
+      <span class="toast-live-text">${message}</span>
+      <a href="${joinHref}" class="toast-live-join">Join</a>
+    `;
+    root.appendChild(toast);
+    setTimeout(() => toast.classList.add('show'), 10);
+    setTimeout(() => {
+      toast.classList.remove('show');
+      setTimeout(() => toast.remove(), 400);
+    }, 8000);
   },
 
   renderGuestBanner() {

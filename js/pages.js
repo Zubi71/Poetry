@@ -13,6 +13,7 @@ const Pages = {
 
     const content = `
       ${Components.renderGuestBanner()}
+      <div id="home-mushaira-live-root"></div>
       <div class="feed-tabs">
         <a href="#/?tab=foryou" class="feed-tab ${tab === 'foryou' ? 'active' : ''}">For You</a>
         <a href="#/?tab=trending" class="feed-tab ${tab === 'trending' ? 'active' : ''}">Trending</a>
@@ -308,49 +309,15 @@ const Pages = {
   },
 
   mushaira(params) {
-    const registered = Storage.getRegisteredEvents();
-    const allEvents = getAllMushairaEvents();
-    const liveEvents = allEvents.filter(e => e.live);
-    const upcoming = allEvents.filter(e => !e.live);
-
     const content = `
       <div class="page-header">
         <h1>Mushaira Events</h1>
-        <p>Join live poetry gatherings and upcoming mushairas</p>
-        <a href="#/mushaira" class="btn btn-gold create-mushaira-btn">Create Event</a>
+        <p>Join live poetry gatherings — new events appear instantly for everyone</p>
+        <button type="button" class="btn btn-gold create-mushaira-btn">Create Event</button>
       </div>
-      ${liveEvents.length ? `
-        <section class="events-section">
-          <h2><span class="live-badge">Live</span> Live Now</h2>
-          ${liveEvents.map(event => `
-            <div class="event-card content-card-v2 live">
-              <div class="event-info">
-                <h3>${event.title}</h3>
-                <p>Host: ${event.host}</p>
-                <p>${event.date} · ${event.time} · ${event.location}</p>
-                <p>${event.registered} registered</p>
-              </div>
-              <button class="btn btn-gold join-event-btn" data-event-id="${event.id}" data-live="1">Join Live</button>
-            </div>
-          `).join('')}
-        </section>
-      ` : ''}
-      <section class="events-section">
-        <h2>Upcoming Events</h2>
-        ${upcoming.map(event => `
-          <div class="event-card content-card-v2">
-            <div class="event-info">
-              <h3>${event.title}</h3>
-              <p>Host: ${event.host}</p>
-              <p>${event.date} · ${event.time} · ${event.location}</p>
-              <p>${event.registered} registered</p>
-            </div>
-            <button class="btn ${registered.includes(event.id) ? 'btn-outline-gold' : 'btn-gold'} register-event-btn" data-event-id="${event.id}">
-              ${registered.includes(event.id) ? 'Registered ✓' : 'Register'}
-            </button>
-          </div>
-        `).join('')}
-      </section>
+      <div id="mushaira-events-root">
+        <p class="loading-inline">Loading events...</p>
+      </div>
     `;
     return Components.renderAppLayout(content);
   },
@@ -362,40 +329,57 @@ const Pages = {
         <div class="form-group"><label>Location</label><input type="text" name="location" placeholder="City, Country"></div>
       </form>
     `, '<button type="button" class="btn btn-gold" id="submit-mushaira">Start Live Event</button>');
-    document.getElementById('submit-mushaira').onclick = () => {
+    document.getElementById('submit-mushaira').onclick = async () => {
       const form = document.getElementById('create-mushaira-form');
       const title = form?.title?.value?.trim();
       if (!title) return;
-      const user = Auth.getCurrentUser();
-      const event = {
-        id: Date.now(),
-        title,
-        date: new Date().toLocaleDateString(),
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        location: form.location?.value?.trim() || 'Online',
-        live: true,
-        registered: 1,
-        host: user.name || 'You'
-      };
-      Storage.addCustomMushaira(event);
+      if (Auth.isGuest()) {
+        Components.showToast('Please sign in to create events', 'error');
+        return;
+      }
+      const btn = document.getElementById('submit-mushaira');
+      if (btn) { btn.disabled = true; btn.textContent = 'Creating...'; }
+
+      const location = form.location?.value?.trim() || 'Online';
+      let event = null;
+
+      if (SupabaseClient.isEnabled()) {
+        event = await API.createMushairaEvent({ title, location, live: true });
+        if (!event) {
+          Components.showToast('Could not create event online. Run supabase/mushaira-events.sql in Supabase.', 'error');
+          if (btn) { btn.disabled = false; btn.textContent = 'Start Live Event'; }
+          return;
+        }
+        window.REMOTE_MUSHAIRA_EVENTS = [event, ...(window.REMOTE_MUSHAIRA_EVENTS || [])];
+        if (typeof MushairaEvents !== 'undefined') MushairaEvents.updateLiveUI();
+      } else {
+        const user = Auth.getCurrentUser();
+        event = {
+          id: Date.now(),
+          title,
+          date: new Date().toLocaleDateString(),
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          location,
+          live: true,
+          registered: 1,
+          host: user.name || 'You'
+        };
+        Storage.addCustomMushaira(event);
+        if (typeof MushairaEvents !== 'undefined') MushairaEvents.updateLiveUI();
+      }
+
+      if (btn) { btn.disabled = false; btn.textContent = 'Start Live Event'; }
       Components.closeModal();
       Router.go(`/mushaira/live/${event.id}`);
     };
   },
 
   mushairaLive(params) {
-    const event = getMushairaEventById(params.id);
-    if (!event) {
-      return Components.renderAppLayout('<div class="page-header"><h1>Event not found</h1><a href="#/mushaira" class="btn btn-gold">Back</a></div>');
-    }
-    const content = renderLiveRoomView({
-      roomKey: `mushaira-${event.id}`,
-      roomId: `M-${event.id}${String(Date.now()).slice(-4)}`,
-      title: event.title,
-      host: event.host,
-      backPath: '#/mushaira',
-      leavePath: '/mushaira'
-    });
+    const content = `
+      <div id="mushaira-live-mount" data-event-id="${params.id}">
+        <p class="loading-inline">Joining event...</p>
+      </div>
+    `;
     return Components.renderAppLayout(content, { noSidebar: true });
   },
 
@@ -422,23 +406,11 @@ const Pages = {
     const content = `
       <div class="page-header">
         <h1>Voice Chat Rooms</h1>
-        <p>Join live poetry discussions and recitations</p>
+        <p>Join live poetry discussions — new rooms appear instantly for everyone</p>
         <button class="btn btn-gold" id="create-room-btn">Create Room</button>
       </div>
-      <div class="rooms-grid">
-        ${getAllVoiceRooms().map(room => `
-          <div class="room-card content-card-v2">
-            <div class="room-header">
-              <h3>${room.title}</h3>
-              <span class="active-badge">${room.active ? '● Active' : 'Offline'}</span>
-            </div>
-            <p>Host: ${room.host}</p>
-            <p>${room.participants} participants</p>
-            <button class="btn ${joined.includes(room.id) ? 'btn-outline-gold' : 'btn-gold'} join-room-btn" data-room-id="${room.id}">
-              ${joined.includes(room.id) ? 'Enter Room' : 'Join Room'}
-            </button>
-          </div>
-        `).join('')}
+      <div class="rooms-grid" id="voice-rooms-grid">
+        <p class="loading-inline">Loading rooms...</p>
       </div>
     `;
     return Components.renderAppLayout(content);

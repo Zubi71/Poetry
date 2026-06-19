@@ -639,5 +639,125 @@ const API = {
     if (!sb) return null;
     const { data } = await sb.from('poems').select('likes_count, comments_count').eq('id', poemId).single();
     return data ? { likes: data.likes_count || 0, comments: data.comments_count || 0 } : null;
+  },
+
+  mapMushairaEvent(row) {
+    if (!row) return null;
+    return {
+      id: row.id,
+      title: row.title,
+      host: row.host_name,
+      date: row.event_date || API.timeAgo(row.created_at),
+      time: row.event_time || 'Now',
+      location: row.location || 'Online',
+      live: row.is_live !== false,
+      registered: row.registered_count || 0,
+      ownerId: row.user_id,
+      userPost: true,
+      created_at: row.created_at
+    };
+  },
+
+  mapVoiceRoom(row) {
+    if (!row) return null;
+    return {
+      id: row.id,
+      title: row.title,
+      host: row.host_name,
+      participants: row.participant_count || 0,
+      active: row.is_active !== false,
+      desc: row.description || '',
+      userPost: true,
+      ownerId: row.user_id
+    };
+  },
+
+  async fetchMushairaEvents() {
+    const sb = SupabaseClient.get();
+    if (!sb) return null;
+    const { data, error } = await sb
+      .from('mushaira_events')
+      .select('*')
+      .order('created_at', { ascending: false });
+    if (error) {
+      console.warn('fetchMushairaEvents:', error.message);
+      return null;
+    }
+    return (data || []).map(r => this.mapMushairaEvent(r));
+  },
+
+  async fetchMushairaEventById(id) {
+    const sb = SupabaseClient.get();
+    if (!sb) return null;
+    const { data, error } = await sb
+      .from('mushaira_events')
+      .select('*')
+      .eq('id', parseInt(id, 10))
+      .maybeSingle();
+    if (error) {
+      console.warn('fetchMushairaEventById:', error.message);
+      return null;
+    }
+    return data ? this.mapMushairaEvent(data) : null;
+  },
+
+  async createMushairaEvent(event) {
+    const sb = SupabaseClient.get();
+    const user = Auth.getCurrentUser();
+    if (!sb || !user?.id || user.isGuest) return null;
+
+    const now = new Date();
+    const { data, error } = await sb.from('mushaira_events').insert({
+      user_id: user.id,
+      host_name: user.name || 'Host',
+      title: event.title,
+      location: event.location || 'Online',
+      event_date: now.toLocaleDateString(),
+      event_time: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      is_live: event.live !== false,
+      registered_count: 1
+    }).select().single();
+
+    if (error) {
+      console.warn('createMushairaEvent:', error.message);
+      return null;
+    }
+    return this.mapMushairaEvent(data);
+  },
+
+  async fetchVoiceRooms() {
+    const sb = SupabaseClient.get();
+    if (!sb) return null;
+    const { data, error } = await sb
+      .from('voice_rooms')
+      .select('*')
+      .eq('is_active', true)
+      .order('created_at', { ascending: false });
+    if (error) {
+      console.warn('fetchVoiceRooms:', error.message);
+      return null;
+    }
+    return (data || []).map(r => this.mapVoiceRoom(r));
+  },
+
+  async createVoiceRoom(room) {
+    const sb = SupabaseClient.get();
+    const user = Auth.getCurrentUser();
+    if (!sb || !user?.id || user.isGuest) return null;
+
+    const { data, error } = await sb.from('voice_rooms').insert({
+      user_id: user.id,
+      host_name: user.name || 'Host',
+      title: room.title,
+      description: room.desc || '',
+      is_active: true,
+      participant_count: 1
+    }).select().single();
+
+    if (error) {
+      console.warn('createVoiceRoom:', error.message);
+      return null;
+    }
+    return this.mapVoiceRoom(data);
   }
 };

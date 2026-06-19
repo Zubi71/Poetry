@@ -443,6 +443,116 @@ input:focus, select:focus, textarea:focus {
   animation: pulse 2s infinite;
 }
 
+/* ===== Global Mushaira Live banner ===== */
+.mushaira-live-banner {
+  background: linear-gradient(90deg, rgba(220, 38, 38, 0.15), rgba(212, 175, 55, 0.12));
+  border-bottom: 1px solid rgba(220, 38, 38, 0.35);
+  animation: mushairaBannerIn 0.35s ease;
+}
+
+.mushaira-live-banner-inner {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 10px 20px;
+}
+
+.mushaira-live-pulse {
+  color: var(--live);
+  font-size: 14px;
+  animation: pulse 1.5s infinite;
+}
+
+.mushaira-live-label {
+  font-weight: 700;
+  color: var(--live);
+  text-transform: uppercase;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+}
+
+.mushaira-live-title {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.mushaira-live-meta {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.mushaira-live-more {
+  font-size: 13px;
+  color: var(--gold);
+}
+
+.mushaira-live-join {
+  margin-left: auto;
+}
+
+@media (max-width: 768px) {
+  .mushaira-live-banner-inner {
+    padding: 10px 14px;
+  }
+  .mushaira-live-join,
+  .home-mushaira-live-inner .btn {
+    margin-left: 0;
+    width: 100%;
+    text-align: center;
+  }
+  .home-mushaira-live-inner {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+.home-mushaira-live-strip {
+  margin-bottom: 20px;
+}
+
+.home-mushaira-live-inner {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 20px 24px;
+  border-color: rgba(220, 38, 38, 0.45);
+}
+
+.home-mushaira-live-text h2 {
+  font-size: 18px;
+  margin: 0 0 4px;
+  color: var(--live);
+}
+
+.home-mushaira-live-text p {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.home-mushaira-live-inner .btn {
+  margin-left: auto;
+}
+
+.home-mushaira-live-more {
+  margin: 8px 0 0;
+  font-size: 13px;
+  text-align: right;
+}
+
+.home-mushaira-live-more a {
+  color: var(--gold);
+}
+
+@keyframes mushairaBannerIn {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 /* ===== Hero Carousel ===== */
 .hero-carousel {
   border-radius: var(--radius);
@@ -1963,6 +2073,23 @@ input:focus, select:focus, textarea:focus {
 
 .toast.show { transform: translateX(0); }
 .toast-error { border-left-color: var(--danger); }
+.toast-live {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-left-color: var(--live);
+  min-width: 280px;
+}
+.toast-live-dot {
+  color: var(--live);
+  animation: pulse 1.5s infinite;
+}
+.toast-live-join {
+  margin-left: auto;
+  color: var(--gold);
+  font-weight: 600;
+  white-space: nowrap;
+}
 
 /* ===== Filters & Search ===== */
 .filters-bar {

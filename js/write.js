@@ -24,15 +24,23 @@ function getAllPoems() {
 async function loadRemoteData() {
   if (!SupabaseClient.isEnabled()) {
     window.REMOTE_POEMS = [];
+    window.REMOTE_MUSHAIRA_EVENTS = [];
+    window.REMOTE_VOICE_ROOMS = [];
     return;
   }
-  window.REMOTE_POEMS = await API.fetchPoems();
-  const tags = await API.getWritingTags();
-  if (tags && tags.length) {
-    Storage.saveWritingTags(tags);
-  }
-  const featuredId = await API.getFeaturedPoemId();
+  const [poems, mushaira, rooms, tags, featuredId] = await Promise.all([
+    API.fetchPoems(),
+    API.fetchMushairaEvents(),
+    API.fetchVoiceRooms(),
+    API.getWritingTags(),
+    API.getFeaturedPoemId()
+  ]);
+  window.REMOTE_POEMS = poems || [];
+  window.REMOTE_MUSHAIRA_EVENTS = mushaira || [];
+  window.REMOTE_VOICE_ROOMS = rooms || [];
+  if (tags && tags.length) Storage.saveWritingTags(tags);
   if (featuredId) Storage.setFeaturedPoem(featuredId);
+  if (typeof MushairaEvents !== 'undefined') MushairaEvents.updateLiveUI();
 }
 
 function getPoemByIdFromAll(id) {

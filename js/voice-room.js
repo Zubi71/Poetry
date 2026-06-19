@@ -520,11 +520,3 @@ function renderLiveRoomView(meta) {
   `;
 }
 
-function getAllMushairaEvents() {
-  return [...Storage.getCustomMushaira(), ...APP_DATA.mushairaEvents];
-}
-
-function getMushairaEventById(id) {
-  const pid = parseInt(id);
-  return getAllMushairaEvents().find(e => e.id === pid);
-}

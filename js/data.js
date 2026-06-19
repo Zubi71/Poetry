@@ -179,7 +179,26 @@ const APP_DATA = {
 };
 
 function getAllVoiceRooms() {
+  if (SupabaseClient.isEnabled()) {
+    return [...(window.REMOTE_VOICE_ROOMS || []), ...Storage.getCustomRooms()];
+  }
   return [...APP_DATA.voiceRooms, ...Storage.getCustomRooms()];
+}
+
+function getAllMushairaEvents() {
+  if (SupabaseClient.isEnabled()) {
+    return window.REMOTE_MUSHAIRA_EVENTS || [];
+  }
+  return [...Storage.getCustomMushaira(), ...APP_DATA.mushairaEvents];
+}
+
+function getLiveMushairaEvents() {
+  return getAllMushairaEvents().filter(e => e.live);
+}
+
+function getMushairaEventById(id) {
+  const pid = parseInt(id, 10);
+  return getAllMushairaEvents().find(e => e.id === pid);
 }
 
 function getVoiceRoomById(id) {

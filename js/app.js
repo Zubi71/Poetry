@@ -19,6 +19,8 @@ const App = {
     if (SupabaseClient.isEnabled()) {
       await Auth.init();
       await loadRemoteData();
+      if (typeof MushairaEvents !== 'undefined') MushairaEvents.subscribe();
+      if (typeof VoiceRoomsList !== 'undefined') VoiceRoomsList.subscribe();
       if (Auth.isLoggedIn() && !Auth.isGuest() && typeof Realtime !== 'undefined') {
         await Realtime.init();
       }
@@ -243,20 +245,42 @@ const App = {
             <div class="form-group"><label>Description</label><input type="text" name="desc" placeholder="Optional topic"></div>
           </form>
         `, '<button class="btn btn-gold" id="submit-room">Create Room</button>');
-        document.getElementById('submit-room').onclick = () => {
+        document.getElementById('submit-room').onclick = async () => {
           const form = document.getElementById('create-room-form');
           const title = form?.title?.value?.trim();
           if (!title) return;
-          const user = Auth.getCurrentUser();
-          const room = Storage.addCustomRoom({
-            id: Date.now(),
-            title,
-            host: user.name || 'You',
-            participants: 1,
-            active: true,
-            premium: false,
-            desc: form.desc?.value?.trim() || ''
-          });
+          if (Auth.isGuest()) {
+            Components.showToast('Please sign in to create rooms', 'error');
+            return;
+          }
+          const submitBtn = document.getElementById('submit-room');
+          if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Creating...'; }
+
+          const desc = form.desc?.value?.trim() || '';
+          let room = null;
+
+          if (SupabaseClient.isEnabled()) {
+            room = await API.createVoiceRoom({ title, desc });
+            if (!room) {
+              Components.showToast('Could not create room online. Run supabase/mushaira-events.sql in Supabase.', 'error');
+              if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Create Room'; }
+              return;
+            }
+            window.REMOTE_VOICE_ROOMS = [room, ...(window.REMOTE_VOICE_ROOMS || [])];
+          } else {
+            const user = Auth.getCurrentUser();
+            room = Storage.addCustomRoom({
+              id: Date.now(),
+              title,
+              host: user.name || 'You',
+              participants: 1,
+              active: true,
+              premium: false,
+              desc
+            });
+          }
+
+          if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Create Room'; }
           Components.closeModal();
           Components.showToast('Voice room created!');
           Router.go(`/voice-rooms/${room.id}`);
@@ -690,6 +714,23 @@ const App = {
 
     const dashNotif = document.getElementById('dashboard-notifications');
     if (dashNotif) Realtime.loadDashboardNotifications();
+
+    const mushairaMount = document.getElementById('mushaira-live-mount');
+    if (mushairaMount && typeof MushairaEvents !== 'undefined') {
+      MushairaEvents.initLivePage(mushairaMount.dataset.eventId);
+    }
+
+    if (document.getElementById('mushaira-events-root') && typeof MushairaEvents !== 'undefined') {
+      MushairaEvents.initPage();
+    }
+
+    if (document.getElementById('voice-rooms-grid') && typeof VoiceRoomsList !== 'undefined') {
+      VoiceRoomsList.initPage();
+    }
+
+    if (typeof MushairaEvents !== 'undefined') {
+      MushairaEvents.updateLiveUI();
+    }
 
     const liveRoom = document.querySelector('.live-room-page');
     if (liveRoom && typeof VoiceRoomLive !== 'undefined') {
