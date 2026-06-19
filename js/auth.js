@@ -84,6 +84,7 @@ const Auth = {
         await this._applySession(session);
       } else if (event === 'SIGNED_OUT') {
         this._session = null;
+        if (typeof Realtime !== 'undefined') Realtime.destroy();
         Storage.clearUser();
         this.loginAsGuest();
       }
@@ -101,6 +102,7 @@ const Auth = {
     const user = API.mapProfile(profile, session.user);
     Storage.setUser(user);
     await API.syncUserData();
+    if (typeof Realtime !== 'undefined') await Realtime.init();
   },
 
   async login(emailOrUsername, password) {
@@ -252,6 +254,7 @@ const Auth = {
   },
 
   async logout() {
+    if (typeof Realtime !== 'undefined') Realtime.destroy();
     if (this.isSupabase()) {
       const sb = SupabaseClient.get();
       await sb.auth.signOut();

@@ -26,7 +26,8 @@ const Storage = {
     REPORTS: 'urdu_poetry_reports',
     FEATURED: 'urdu_poetry_featured',
     CARD_THEME: 'urdu_poetry_card_theme',
-    ANALYTICS: 'urdu_poetry_analytics'
+    ANALYTICS: 'urdu_poetry_analytics',
+    POEM_COMMENTS: 'urdu_poetry_poem_comments'
   },
 
   get(key, defaultVal = null) {
@@ -198,6 +199,31 @@ const Storage = {
       ...notif
     });
     this.set(this.KEYS.NOTIFICATIONS, notifications);
+  },
+
+  getPoemComments(poemId) {
+    const all = this.get(this.KEYS.POEM_COMMENTS, {});
+    return all[String(poemId)] || [];
+  },
+
+  addPoemComment(poemId, text, user) {
+    const all = this.get(this.KEYS.POEM_COMMENTS, {});
+    const key = String(poemId);
+    const comment = {
+      id: Date.now(),
+      poemId: parseInt(poemId),
+      user: user?.name || 'User',
+      text,
+      time: 'Just now'
+    };
+    if (!all[key]) all[key] = [];
+    all[key].push(comment);
+    this.set(this.KEYS.POEM_COMMENTS, all);
+    return comment;
+  },
+
+  getUnreadNotificationCount() {
+    return this.getNotifications().filter(n => !n.read).length;
   },
 
   markNotificationsRead() {

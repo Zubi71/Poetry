@@ -19,6 +19,9 @@ const App = {
     if (SupabaseClient.isEnabled()) {
       await Auth.init();
       await loadRemoteData();
+      if (Auth.isLoggedIn() && !Auth.isGuest() && typeof Realtime !== 'undefined') {
+        await Realtime.init();
+      }
     }
 
     Auth.ensureGuestBrowsing();
@@ -79,17 +82,37 @@ const App = {
     document.querySelectorAll('[data-action="like"]').forEach(btn => {
       btn.onclick = async () => {
         const id = parseInt(btn.dataset.id);
+        const wasLiked = btn.classList.contains('active');
+        const countEl = btn.querySelector('span');
+
+        btn.classList.toggle('active', !wasLiked);
+        if (countEl) {
+          const current = parseInt(String(countEl.textContent).replace(/[^\d]/g, ''), 10) || 0;
+          countEl.textContent = Components.formatNumber(current + (wasLiked ? -1 : 1));
+        }
+
         let liked;
         if (SupabaseClient.isEnabled() && Auth.isLoggedIn()) {
           liked = await API.toggleLike(id);
-          if (liked !== null) Storage.set(Storage.KEYS.LIKES, await API.getUserLikes());
+          if (liked === null) {
+            btn.classList.toggle('active', wasLiked);
+            if (countEl) {
+              const current = parseInt(String(countEl.textContent).replace(/[^\d]/g, ''), 10) || 0;
+              countEl.textContent = Components.formatNumber(current + (wasLiked ? 1 : -1));
+            }
+            Components.showToast('Could not update like', 'error');
+            return;
+          }
+          Storage.set(Storage.KEYS.LIKES, await API.getUserLikes());
+          const counts = await API.getPoemCounts(id);
+          if (counts) Realtime.updateLikeButton(id, liked, counts.likes);
         } else {
           liked = Storage.toggleLike(id);
+          document.querySelectorAll(`[data-action="like"][data-id="${id}"]`).forEach(b => {
+            b.classList.toggle('active', liked);
+          });
         }
         if (liked) Storage.incrementAnalytics('likes');
-        btn.classList.toggle('active', liked);
-        Components.showToast(liked ? 'Poem liked!' : 'Like removed');
-        Router.navigate();
       };
     });
 
@@ -300,15 +323,30 @@ const App = {
     // Chat form
     const chatForm = document.getElementById('chat-form');
     if (chatForm) {
-      chatForm.onsubmit = (e) => {
+      chatForm.onsubmit = async (e) => {
         e.preventDefault();
         if (!Auth.canMessage()) {
           Components.showToast('Please login to send messages', 'error');
           return;
         }
         const input = chatForm.querySelector('input');
+        const text = input.value.trim();
+        if (!text) return;
+
+        const conversationId = chatForm.dataset.conversationId;
+        if (conversationId && SupabaseClient.isEnabled()) {
+          const msg = await API.sendMessage(parseInt(conversationId), text);
+          if (!msg) {
+            Components.showToast('Failed to send message', 'error');
+            return;
+          }
+          input.value = '';
+          Realtime.appendChatMessage(msg);
+          return;
+        }
+
         const chatId = parseInt(chatForm.dataset.chatId);
-        Storage.addMessage(chatId, input.value);
+        Storage.addMessage(chatId, text);
         input.value = '';
         Router.navigate();
       };
@@ -317,11 +355,41 @@ const App = {
     // Comment form
     const commentForm = document.getElementById('comment-form');
     if (commentForm) {
-      commentForm.onsubmit = (e) => {
+      commentForm.onsubmit = async (e) => {
         e.preventDefault();
-        Components.showToast('Comment posted!');
+        if (!Auth.isLoggedIn() || Auth.isGuest()) {
+          Components.showToast('Please sign in to comment', 'error');
+          return;
+        }
+        const poemId = parseInt(commentForm.dataset.poemId);
+        const input = commentForm.querySelector('input');
+        const text = input.value.trim();
+        if (!text) return;
+
+        const user = Auth.getCurrentUser();
+        const tempId = `temp-${Date.now()}`;
+        const optimistic = { id: tempId, user: user.name, text, time: 'Just now' };
+
+        document.querySelector('.comments-empty')?.remove();
+        document.querySelector('.comments-list .loading-inline')?.remove();
+        Realtime.appendComment(optimistic);
+        Realtime.bumpCommentCount(poemId);
+        input.value = '';
+
+        const comment = await API.postComment(poemId, text);
+        if (!comment) {
+          document.querySelector(`[data-comment-id="${tempId}"]`)?.remove();
+          Realtime.bumpCommentCount(poemId, -1);
+          Components.showToast('Failed to post comment', 'error');
+          return;
+        }
+
+        const tempEl = document.querySelector(`[data-comment-id="${tempId}"]`);
+        if (tempEl && comment.id !== tempId) {
+          tempEl.dataset.commentId = comment.id;
+          tempEl.querySelector('.comment-time').textContent = comment.time;
+        }
         Storage.incrementAnalytics('comments');
-        commentForm.querySelector('input').value = '';
       };
     }
 
@@ -625,6 +693,105 @@ const App = {
         Router.navigate();
       };
     });
+
+    document.querySelectorAll('.message-poet-btn').forEach(btn => {
+      btn.onclick = async () => {
+        const convId = await API.getOrCreateConversation(btn.dataset.userId);
+        if (convId) Router.go(`/messages/${convId}`);
+        else Components.showToast('Could not start conversation', 'error');
+      };
+    });
+
+    this.bindPageRealtime();
+  },
+
+  bindPageRealtime() {
+    if (typeof Realtime === 'undefined') return;
+
+    const poemSection = document.querySelector('.comments-section[data-poem-id]');
+    if (poemSection) {
+      const poemId = parseInt(poemSection.dataset.poemId);
+      Realtime.loadComments(poemId);
+      if (SupabaseClient.isEnabled() && Auth.isLoggedIn() && !Auth.isGuest()) {
+        Realtime.subscribePoem(poemId);
+      }
+    } else {
+      Realtime.unsubscribePoem();
+    }
+
+    const notifList = document.getElementById('notifications-list');
+    if (notifList) Realtime.loadNotifications(true);
+
+    const dashNotif = document.getElementById('dashboard-notifications');
+    if (dashNotif) Realtime.loadDashboardNotifications();
+
+    if (!SupabaseClient.isEnabled() || !Auth.isLoggedIn() || Auth.isGuest()) return;
+
+    const chatList = document.getElementById('chat-list');
+    if (chatList) Realtime.loadConversations();
+
+    const chatView = document.querySelector('.chat-view[data-conversation-id]');
+    if (chatView) {
+      const convId = parseInt(chatView.dataset.conversationId);
+      Realtime.loadChatThread(convId);
+      API.getConversations().then(convs => {
+        const conv = convs?.find(c => c.id === convId);
+        const header = document.getElementById('chat-header-user');
+        if (conv && header) {
+          header.innerHTML = `
+            <div class="chat-avatar-wrap" data-online-user="${conv.otherUserId}">
+              ${avatarImg(conv.user, '', conv.user)}
+              <span class="online-dot ${Realtime.isUserOnline(conv.otherUserId) ? 'online' : 'offline'}"></span>
+            </div>
+            <div>
+              <h2>${conv.user}</h2>
+              <span class="presence-label ${Realtime.isUserOnline(conv.otherUserId) ? 'online' : 'offline'}">
+                ${Realtime.isUserOnline(conv.otherUserId) ? 'Online' : 'Offline'}
+              </span>
+            </div>
+          `;
+        }
+      });
+    } else {
+      Realtime.unsubscribeConversation();
+    }
+
+    const userSearch = document.getElementById('user-search');
+    if (userSearch) {
+      let timer;
+      userSearch.oninput = () => {
+        clearTimeout(timer);
+        timer = setTimeout(async () => {
+          const results = document.getElementById('user-search-results');
+          const q = userSearch.value.trim();
+          if (!q || q.length < 2) {
+            results.innerHTML = '<p class="empty-state">Type at least 2 characters to search.</p>';
+            return;
+          }
+          const users = await API.searchProfiles(q);
+          if (!users.length) {
+            results.innerHTML = '<p class="empty-state">No users found.</p>';
+            return;
+          }
+          results.innerHTML = users.map(u => `
+            <button type="button" class="user-search-item" data-user-id="${u.id}">
+              ${avatarImg(u.name, '', u.name)}
+              <div>
+                <strong>${u.name}</strong>
+                ${u.username ? `<span>@${u.username}</span>` : ''}
+              </div>
+            </button>
+          `).join('');
+          results.querySelectorAll('.user-search-item').forEach(btn => {
+            btn.onclick = async () => {
+              const convId = await API.getOrCreateConversation(btn.dataset.userId);
+              if (convId) Router.go(`/messages/${convId}`);
+              else Components.showToast('Could not start conversation', 'error');
+            };
+          });
+        }, 300);
+      };
+    }
   },
 
   async loadAdminUsers() {

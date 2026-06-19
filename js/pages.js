@@ -227,6 +227,9 @@ const Pages = {
             </div>
           </a>
           <span class="category-badge" style="background:${category ? category.color : '#D4AF37'}">${tagLabel}</span>
+          ${poem.ownerId && Auth.getCurrentUser()?.id && poem.ownerId !== Auth.getCurrentUser().id && SupabaseClient.isEnabled() ? `
+            <button type="button" class="btn btn-outline-gold btn-sm message-poet-btn" data-user-id="${poem.ownerId}">Message</button>
+          ` : ''}
         </div>
         <div class="poem-detail-content poem-card-${poem.cardTheme || 'classic-dark'}">
           ${formatPoemHtml(poem.text, poem.cardTheme)}
@@ -237,7 +240,7 @@ const Pages = {
             ${Components.icon('heart')} <span>${Components.formatNumber(poem.likes + (liked ? 1 : 0))}</span>
           </button>
           <span class="action-divider"></span>
-          <span class="action-btn">${Components.icon('comment')} <span>${poem.comments}</span></span>
+          <span class="action-btn comment-count">${Components.icon('comment')} <span>${poem.comments}</span></span>
           <span class="action-divider"></span>
           <button class="action-btn share-btn" data-action="share" data-id="${poem.id}">${Components.icon('share')} Share</button>
           <span class="action-divider"></span>
@@ -248,23 +251,16 @@ const Pages = {
           <button class="action-btn download-btn" data-action="download" data-id="${poem.id}">⬇️ Download</button>
           <button class="action-btn report-btn" data-type="post" data-id="${poem.id}">🚩 Report</button>
         </div>
-        <section class="comments-section">
+        <section class="comments-section" data-poem-id="${poem.id}">
           <h3>Comments (${poem.comments})</h3>
+          ${Auth.isLoggedIn() && !Auth.isGuest() ? `
           <form class="comment-form" id="comment-form" data-poem-id="${poem.id}">
-            <input type="text" placeholder="Write a comment..." required>
+            <input type="text" placeholder="Write a comment..." required maxlength="500">
             <button type="submit" class="btn btn-gold">Post</button>
           </form>
-          <div class="comments-list">
-            ${APP_DATA.sampleComments.map(c => `
-              <div class="comment">
-                ${avatarImg(c.user, '', c.user)}
-                <div>
-                  <strong>${c.user}</strong>
-                  <span class="comment-time">${c.time}</span>
-                  <p>${c.text}</p>
-                </div>
-              </div>
-            `).join('')}
+          ` : '<p class="comment-login-hint"><a href="#/login">Sign in</a> to comment.</p>'}
+          <div class="comments-list" id="comments-list">
+            <p class="loading-inline">Loading comments...</p>
           </div>
         </section>
       </div>
@@ -490,6 +486,44 @@ const Pages = {
 
   messages(params) {
     const chatId = params.id;
+
+    if (chatId === 'new') {
+      const content = `
+        <div class="page-header">
+          <a href="#/messages" class="back-link">${Components.icon('back')} Messages</a>
+          <h1>New Message</h1>
+        </div>
+        <div class="search-form">
+          <input type="search" placeholder="Search users by name or username..." id="user-search" autofocus>
+        </div>
+        <div class="user-search-results" id="user-search-results">
+          <p class="empty-state">Type to find someone to message.</p>
+        </div>
+      `;
+      return Components.renderAppLayout(content, { noSidebar: true });
+    }
+
+    if (chatId && SupabaseClient.isEnabled() && Auth.isLoggedIn() && !Auth.isGuest()) {
+      const content = `
+        <div class="chat-view" data-conversation-id="${chatId}">
+          <div class="chat-header">
+            <a href="#/messages" class="back-link">${Components.icon('back')}</a>
+            <div class="chat-header-user" id="chat-header-user">
+              <span class="loading-inline">Loading...</span>
+            </div>
+          </div>
+          <div class="chat-messages" id="chat-messages">
+            <p class="loading-inline">Loading messages...</p>
+          </div>
+          <form class="chat-input" id="chat-form" data-conversation-id="${chatId}">
+            <input type="text" placeholder="Type a message..." required maxlength="1000">
+            <button type="submit" class="btn btn-gold">Send</button>
+          </form>
+        </div>
+      `;
+      return Components.renderAppLayout(content, { noSidebar: true });
+    }
+
     if (chatId) {
       const chat = APP_DATA.sampleChats.find(c => c.id === parseInt(chatId));
       const messages = [...(APP_DATA.chatMessages[chatId] || []), ...Storage.getMessages().filter(m => m.chatId === parseInt(chatId))];
@@ -517,16 +551,17 @@ const Pages = {
       return Components.renderAppLayout(content, { noSidebar: true });
     }
 
+    const useLive = SupabaseClient.isEnabled() && Auth.isLoggedIn() && !Auth.isGuest();
     const content = `
       <div class="page-header">
         <h1>Messages</h1>
-        <a href="#/messages/new" class="btn btn-gold btn-sm">New Message</a>
+        ${useLive ? '<a href="#/messages/new" class="btn btn-gold btn-sm">New Message</a>' : ''}
       </div>
       <div class="search-form">
         <input type="search" placeholder="Search messages..." id="message-search">
       </div>
-      <div class="chat-list">
-        ${APP_DATA.sampleChats.map(chat => `
+      <div class="chat-list" id="chat-list">
+        ${useLive ? '<p class="loading-inline">Loading conversations...</p>' : APP_DATA.sampleChats.map(chat => `
           <a href="#/messages/${chat.id}" class="chat-item">
             ${avatarImg(chat.user, '', chat.user)}
             <div class="chat-item-info">
@@ -545,22 +580,25 @@ const Pages = {
   },
 
   notifications() {
-    Storage.markNotificationsRead();
-    const notifications = Storage.getNotifications();
+    const useLive = SupabaseClient.isEnabled() && Auth.isLoggedIn() && !Auth.isGuest();
+    if (!useLive) Storage.markNotificationsRead();
+    const notifications = useLive ? [] : Storage.getNotifications();
     const content = `
       <div class="page-header">
         <h1>Notifications</h1>
       </div>
-      <div class="notifications-list">
-        ${notifications.map(n => `
-          <div class="notification-item ${n.read ? '' : 'unread'} type-${n.type}">
+      <div class="notifications-list" id="notifications-list">
+        ${useLive ? '<p class="loading-inline">Loading notifications...</p>' : notifications.map(n => {
+          const link = n.poemId ? `#/poem/${n.poemId}` : '#';
+          return `
+          <a href="${link}" class="notification-item ${n.read ? '' : 'unread'} type-${n.type}">
             <span class="notif-icon">${n.type === 'like' ? '❤️' : n.type === 'comment' ? '💬' : n.type === 'follow' ? '👤' : '📅'}</span>
             <div>
               <p>${n.text}</p>
               <span class="notif-time">${n.time}</span>
             </div>
-          </div>
-        `).join('')}
+          </a>`;
+        }).join('')}
       </div>
     `;
     return Components.renderAppLayout(content);
@@ -861,6 +899,16 @@ const Pages = {
           <div class="stat-card"><span class="stat-icon">↗️</span><strong>${stats.shares}</strong><span>Shares</span></div>
           <div class="stat-card"><span class="stat-icon">🔖</span><strong>${Storage.getBookmarks().length}</strong><span>Saves</span></div>
         </div>
+
+        <section class="dashboard-section" id="dashboard-notifications-section">
+          <div class="section-row">
+            <h2>Recent Notifications</h2>
+            <a href="#/notifications" class="btn btn-outline-gold btn-sm">View All</a>
+          </div>
+          <div class="notifications-list dashboard-notifications" id="dashboard-notifications">
+            <p class="loading-inline">Loading notifications...</p>
+          </div>
+        </section>
 
         <section class="dashboard-section">
           <h2>Poetry Card Customizer</h2>

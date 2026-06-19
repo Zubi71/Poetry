@@ -64,7 +64,9 @@ const Components = {
 
   renderHeader() {
     const user = Auth.getCurrentUser();
-    const unread = Storage.getNotifications().filter(n => !n.read).length;
+    const unread = (typeof Realtime !== 'undefined' && Realtime.unreadCount != null && SupabaseClient.isEnabled() && Auth.isLoggedIn() && !Auth.isGuest())
+      ? Realtime.unreadCount
+      : Storage.getNotifications().filter(n => !n.read).length;
     return `
       <header class="header">
         <button class="menu-toggle" id="menu-toggle" aria-label="Menu">${this.icon('menu')}</button>

@@ -910,6 +910,15 @@ input:focus, select:focus, textarea:focus {
 /* ===== Poem Detail ===== */
 .poem-detail { max-width: 700px; margin: 0 auto; }
 
+.poem-detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
 .poem-detail-content {
   background: var(--bg-card);
   border: 1px solid var(--border);
@@ -1279,12 +1288,60 @@ input:focus, select:focus, textarea:focus {
   padding: 14px 16px;
   border-bottom: 1px solid var(--border);
   transition: background var(--transition);
+  text-decoration: none;
+  color: inherit;
 }
 
 .notification-item.unread { background: rgba(212,175,55,0.05); }
 .notification-item:hover { background: var(--bg-hover); }
 .notif-icon { font-size: 20px; }
 .notif-time { font-size: 12px; color: var(--text-muted); }
+
+/* ===== Real-time social ===== */
+.loading-inline { color: var(--text-muted); font-size: 14px; padding: 16px; text-align: center; }
+
+.chat-avatar-wrap { position: relative; display: inline-flex; }
+.online-dot {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--bg-card);
+  background: var(--text-muted);
+}
+.online-dot.online { background: #22c55e; }
+.online-dot.offline { background: #6b7280; }
+
+.presence-label { font-size: 12px; color: var(--text-muted); }
+.presence-label.online { color: #22c55e; }
+
+.chat-header-user { display: flex; align-items: center; gap: 12px; flex: 1; }
+.chat-header-user h2 { margin: 0; font-size: 16px; }
+
+.user-search-results { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
+.user-search-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  color: inherit;
+  text-align: left;
+  width: 100%;
+  transition: background var(--transition);
+}
+.user-search-item:hover { background: var(--bg-hover); }
+.user-search-item span { display: block; font-size: 12px; color: var(--text-muted); }
+
+.comment-login-hint { font-size: 14px; color: var(--text-secondary); margin-bottom: 16px; }
+.comment-login-hint a { color: var(--gold); }
+
+.dashboard-notifications .notification-item { border-radius: var(--radius); margin-bottom: 8px; border: 1px solid var(--border); border-bottom: 1px solid var(--border); }
 
 /* ===== Settings ===== */
 .settings-sections { max-width: 600px; }

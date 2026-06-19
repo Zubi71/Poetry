@@ -27,8 +27,9 @@ Follow these steps to make the site live with real user registration, login, and
 1. Open **SQL Editor** in your Supabase dashboard
 2. Copy the entire contents of `supabase/schema.sql` and click **Run**
 3. Copy the contents of `supabase/storage.sql` and click **Run**
+4. Copy the contents of `supabase/realtime-social.sql` and click **Run**
 
-This creates tables: `profiles`, `poems`, `likes`, `bookmarks`, `drafts`, `writing_tags`, `reports`, etc.
+This creates tables: `profiles`, `poems`, `likes`, `bookmarks`, `drafts`, `writing_tags`, `reports`, `notifications`, `conversations`, `messages`, and enables real-time triggers.
 
 ---
 
