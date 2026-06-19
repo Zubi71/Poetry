@@ -650,13 +650,13 @@ const App = {
       };
     });
 
-    // Admin panel
-    if (document.getElementById('admin-users-list')) {
-      this.loadAdminUsers();
+    // Admin panel v2
+    if (document.querySelector('.admin-shell') && typeof AdminPanel !== 'undefined') {
+      AdminPanel.bindEvents();
     }
 
     const saveTagsBtn = document.getElementById('save-tags-btn');
-    if (saveTagsBtn) {
+    if (saveTagsBtn && !document.querySelector('.admin-shell')) {
       saveTagsBtn.onclick = async () => {
         const rows = document.querySelectorAll('.admin-tag-row');
         const tags = [];
@@ -677,7 +677,7 @@ const App = {
     }
 
     const addTagBtn = document.getElementById('add-tag-btn');
-    if (addTagBtn) {
+    if (addTagBtn && !document.querySelector('.admin-shell')) {
       addTagBtn.onclick = () => {
         const tags = Storage.getWritingTags();
         tags.push({ id: Date.now(), label: 'نیا', en: 'New' });
@@ -686,27 +686,29 @@ const App = {
       };
     }
 
-    document.querySelectorAll('.delete-tag-btn').forEach(btn => {
-      btn.onclick = () => {
-        const id = parseInt(btn.dataset.tagId);
-        Storage.saveWritingTags(Storage.getWritingTags().filter(t => t.id !== id));
-        Router.navigate();
-      };
-    });
+    if (!document.querySelector('.admin-shell')) {
+      document.querySelectorAll('.delete-tag-btn').forEach(btn => {
+        btn.onclick = () => {
+          const id = parseInt(btn.dataset.tagId);
+          Storage.saveWritingTags(Storage.getWritingTags().filter(t => t.id !== id));
+          Router.navigate();
+        };
+      });
 
-    document.querySelectorAll('.resolve-report-btn').forEach(btn => {
-      btn.onclick = async () => {
-        const id = parseInt(btn.dataset.id);
-        const action = btn.dataset.action;
-        if (SupabaseClient.isEnabled()) {
-          await API.resolveReport(id, action);
-        } else {
-          Storage.resolveReport(id, action);
-        }
-        Components.showToast('Report resolved');
-        Router.navigate();
-      };
-    });
+      document.querySelectorAll('.resolve-report-btn').forEach(btn => {
+        btn.onclick = async () => {
+          const id = parseInt(btn.dataset.id);
+          const action = btn.dataset.action;
+          if (SupabaseClient.isEnabled()) {
+            await API.resolveReport(id, action);
+          } else {
+            Storage.resolveReport(id, action);
+          }
+          Components.showToast('Report resolved');
+          Router.navigate();
+        };
+      });
+    }
 
     document.querySelectorAll('.message-poet-btn').forEach(btn => {
       btn.onclick = async () => {
@@ -844,69 +846,6 @@ const App = {
         }, 300);
       };
     }
-  },
-
-  async loadAdminUsers() {
-    const container = document.getElementById('admin-users-list');
-    if (!container) return;
-
-    const users = SupabaseClient.isEnabled()
-      ? await API.fetchAdminUsers()
-      : Storage.getAdminUsersList();
-
-    if (users === null) {
-      container.innerHTML = `
-        <p class="admin-error">Could not load users. Run <code>supabase/migrate-user-role.sql</code> in Supabase SQL Editor first.</p>
-      `;
-      return;
-    }
-
-    if (!users.length) {
-      container.innerHTML = '<p class="empty-state">No registered users yet.</p>';
-      return;
-    }
-
-    const currentId = Auth.getCurrentUser()?.id;
-    container.innerHTML = users.map(u => `
-      <div class="admin-user-row">
-        <div class="admin-user-info">
-          <strong>${u.displayName || u.username || 'User'}</strong>
-          <span>${u.email || u.username || ''}</span>
-        </div>
-        <select class="admin-role-select filter-select" data-user-id="${u.id}" aria-label="User role" ${u.id === currentId ? 'title="You cannot remove your own admin role"' : ''}>
-          <option value="user" ${u.userRole !== 'admin' ? 'selected' : ''}>user</option>
-          <option value="admin" ${u.userRole === 'admin' ? 'selected' : ''}>admin</option>
-        </select>
-      </div>
-    `).join('');
-
-    container.querySelectorAll('.admin-role-select').forEach(select => {
-      select.addEventListener('change', async () => {
-        const userId = select.dataset.userId;
-        const role = select.value;
-        const currentUser = Auth.getCurrentUser();
-
-        if (userId === currentUser?.id && role === 'user') {
-          Components.showToast('You cannot remove your own admin role', 'error');
-          select.value = 'admin';
-          return;
-        }
-
-        let ok = false;
-        if (SupabaseClient.isEnabled()) {
-          ok = await API.setUserRole(userId, role);
-        } else {
-          ok = Storage.setLocalUserRole(userId, role);
-        }
-
-        if (ok) {
-          Components.showToast(role === 'admin' ? 'Role set to admin' : 'Role set to user');
-        } else {
-          Components.showToast('Failed to update role. Run supabase/migrate-user-role.sql first.', 'error');
-          this.loadAdminUsers();
-        }
-      });
-    });
   }
 };
 

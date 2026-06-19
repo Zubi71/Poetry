@@ -497,6 +497,22 @@ const Storage = {
     this.set(this.KEYS.REPORTS, reports);
   },
 
+  getAdminLog() {
+    return this.get('urdu_poetry_admin_log', []);
+  },
+
+  logAdminAction(action, detail) {
+    const user = typeof Auth !== 'undefined' ? Auth.getCurrentUser() : null;
+    const log = this.getAdminLog();
+    log.unshift({
+      action,
+      detail: detail || '',
+      admin: user?.name || 'Admin',
+      time: new Date().toLocaleString()
+    });
+    this.set('urdu_poetry_admin_log', log.slice(0, 100));
+  },
+
   getFeaturedPoem() {
     return this.get(this.KEYS.FEATURED, null);
   },

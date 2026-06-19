@@ -950,81 +950,13 @@ const Pages = {
       return Components.renderAppLayout(`
         <div class="empty-state">
           <h2>Admin Access Required</h2>
-          <p>Login with admin@urdupoetry.com to access the admin panel.</p>
+          <p>You must be logged in as an admin to access this panel.</p>
           <a href="#/login" class="btn btn-gold">Login</a>
         </div>
       `);
     }
-
-    const tags = Storage.getWritingTags();
-    const reports = Storage.getReports().filter(r => r.status === 'pending');
-    const contests = APP_DATA.contests.filter(c => c.status === 'active');
-
-    const content = `
-      <div class="admin-page">
-        <div class="page-header">
-          <h1>🛡️ Admin Dashboard</h1>
-          <p>Manage users, tags, contests & moderation</p>
-        </div>
-
-        <section class="admin-section">
-          <h2>User Roles</h2>
-          <p class="section-desc">Assign role from dropdown — <strong>user</strong> or <strong>admin</strong> (saved to database)</p>
-          <div id="admin-users-list" class="admin-users-list">
-            <p class="admin-loading">Loading users…</p>
-          </div>
-        </section>
-
-        <section class="admin-section">
-          <h2>Dynamic Tag Manager</h2>
-          <p class="section-desc">Add, edit or remove scrolling tags in the writing window</p>
-          <div class="admin-tags-list">
-            ${tags.map(tag => `
-              <div class="admin-tag-row">
-                <input type="text" class="tag-label-input urdu-text" value="${tag.label}" data-tag-id="${tag.id}" data-field="label">
-                <input type="text" class="tag-en-input" value="${tag.en}" data-tag-id="${tag.id}" data-field="en" placeholder="English">
-                <button type="button" class="btn btn-ghost btn-sm delete-tag-btn" data-tag-id="${tag.id}">Delete</button>
-              </div>
-            `).join('')}
-          </div>
-          <div class="admin-actions">
-            <button type="button" class="btn btn-outline-gold" id="add-tag-btn">+ Add Tag</button>
-            <button type="button" class="btn btn-gold" id="save-tags-btn">Save Tags</button>
-          </div>
-        </section>
-
-        <section class="admin-section">
-          <h2>Contest Manager</h2>
-          ${contests.map(c => `
-            <div class="contest-card content-card-v2">
-              <div>
-                <h3>${c.title}</h3>
-                <p>${c.entries} entries · Deadline: ${c.deadline} · Prize: ${c.prize}</p>
-              </div>
-              <a href="#/contests" class="btn btn-outline-gold btn-sm">View Submissions</a>
-            </div>
-          `).join('')}
-        </section>
-
-        <section class="admin-section">
-          <h2>Report & Moderation Queue (${reports.length})</h2>
-          ${reports.length ? reports.map(r => `
-            <div class="report-card">
-              <div>
-                <strong>${r.type === 'post' ? 'Post' : 'User'} Report #${r.id}</strong>
-                <p>${r.reason || 'Reported for review'}</p>
-                <span class="notif-time">${r.time}</span>
-              </div>
-              <div class="report-actions">
-                <button type="button" class="btn btn-gold btn-sm resolve-report-btn" data-id="${r.id}" data-action="approved">Approve</button>
-                <button type="button" class="btn btn-ghost btn-sm resolve-report-btn" data-id="${r.id}" data-action="removed">Remove</button>
-              </div>
-            </div>
-          `).join('') : '<p class="empty-state">No pending reports. Community is clean! ✓</p>'}
-        </section>
-      </div>
-    `;
-    return Components.renderAppLayout(content, { fullWidth: true });
+    const section = query.section || 'dashboard';
+    return AdminPanel.render(section);
   },
 
   notFound() {
