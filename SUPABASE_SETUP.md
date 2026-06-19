@@ -29,6 +29,8 @@ Follow these steps to make the site live with real user registration, login, and
 3. Copy the contents of `supabase/storage.sql` and click **Run**
 4. Copy the contents of `supabase/realtime-social.sql` and click **Run**
 
+   **Or** if you only need to fix notifications, run `supabase/fix-notifications.sql` — it creates all social tables and functions in one go.
+
 This creates tables: `profiles`, `poems`, `likes`, `bookmarks`, `drafts`, `writing_tags`, `reports`, `notifications`, `conversations`, `messages`, and enables real-time triggers.
 
 ---

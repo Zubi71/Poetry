@@ -1,6 +1,49 @@
--- Quick fix: run this if you already ran realtime-social.sql and notifications still don't work.
--- Adds the create_notification RPC used by the app for like/comment alerts.
+-- ============================================================
+-- Social features setup (run this ONE file in SQL Editor)
+-- Safe to run multiple times. Creates tables if missing.
+-- Run AFTER supabase/schema.sql
+-- ============================================================
 
+-- Step 1: Create tables (notifications was missing — this fixes the error)
+CREATE TABLE IF NOT EXISTS public.conversations (
+  id BIGSERIAL PRIMARY KEY,
+  user1_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  user2_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  last_message_at TIMESTAMPTZ DEFAULT NOW(),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  CONSTRAINT conversations_users_ordered CHECK (user1_id < user2_id),
+  UNIQUE (user1_id, user2_id)
+);
+
+CREATE TABLE IF NOT EXISTS public.messages (
+  id BIGSERIAL PRIMARY KEY,
+  conversation_id BIGINT NOT NULL REFERENCES public.conversations(id) ON DELETE CASCADE,
+  sender_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  text TEXT NOT NULL,
+  read_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS public.notifications (
+  id BIGSERIAL PRIMARY KEY,
+  user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  actor_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+  type TEXT NOT NULL CHECK (type IN ('like', 'comment', 'message', 'follow')),
+  poem_id BIGINT REFERENCES public.poems(id) ON DELETE CASCADE,
+  message_id BIGINT REFERENCES public.messages(id) ON DELETE CASCADE,
+  conversation_id BIGINT REFERENCES public.conversations(id) ON DELETE CASCADE,
+  text TEXT NOT NULL,
+  read BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_notifications_user_created ON public.notifications(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notifications_unread ON public.notifications(user_id) WHERE read = FALSE;
+CREATE INDEX IF NOT EXISTS idx_messages_conversation ON public.messages(conversation_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_conversations_user1 ON public.conversations(user1_id);
+CREATE INDEX IF NOT EXISTS idx_conversations_user2 ON public.conversations(user2_id);
+
+-- Step 2: Functions
 CREATE OR REPLACE FUNCTION public.create_notification(
   p_user_id UUID,
   p_actor_id UUID,
@@ -24,9 +67,28 @@ BEGIN
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION public.create_notification(UUID, UUID, TEXT, TEXT, BIGINT, BIGINT) TO authenticated;
+CREATE OR REPLACE FUNCTION public.get_or_create_conversation(other_user_id UUID)
+RETURNS BIGINT
+LANGUAGE plpgsql
+SECURITY DEFINER SET search_path = public
+AS $$
+DECLARE
+  uid UUID := auth.uid();
+  low_id UUID;
+  high_id UUID;
+  conv_id BIGINT;
+BEGIN
+  IF uid IS NULL OR other_user_id IS NULL OR uid = other_user_id THEN RETURN NULL; END IF;
+  IF uid < other_user_id THEN low_id := uid; high_id := other_user_id;
+  ELSE low_id := other_user_id; high_id := uid; END IF;
+  SELECT id INTO conv_id FROM public.conversations WHERE user1_id = low_id AND user2_id = high_id;
+  IF conv_id IS NULL THEN
+    INSERT INTO public.conversations (user1_id, user2_id) VALUES (low_id, high_id) RETURNING id INTO conv_id;
+  END IF;
+  RETURN conv_id;
+END;
+$$;
 
--- Remove duplicate notification triggers (counts only)
 CREATE OR REPLACE FUNCTION public.update_poem_likes_count()
 RETURNS TRIGGER
 LANGUAGE plpgsql
@@ -61,7 +123,102 @@ BEGIN
 END;
 $$;
 
+CREATE OR REPLACE FUNCTION public.on_message_insert()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER SET search_path = public
+AS $$
+DECLARE
+  recipient_id UUID;
+  sender_name TEXT;
+  conv RECORD;
+BEGIN
+  SELECT * INTO conv FROM public.conversations WHERE id = NEW.conversation_id;
+  IF conv.user1_id = NEW.sender_id THEN recipient_id := conv.user2_id;
+  ELSE recipient_id := conv.user1_id; END IF;
+  UPDATE public.conversations SET last_message_at = NOW() WHERE id = NEW.conversation_id;
+  IF recipient_id IS NOT NULL AND recipient_id <> NEW.sender_id THEN
+    SELECT COALESCE(display_name, username, 'Someone') INTO sender_name FROM public.profiles WHERE id = NEW.sender_id;
+    INSERT INTO public.notifications (user_id, actor_id, type, message_id, conversation_id, text)
+    VALUES (recipient_id, NEW.sender_id, 'message', NEW.id, NEW.conversation_id, sender_name || ' sent you a message');
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.create_notification(UUID, UUID, TEXT, TEXT, BIGINT, BIGINT) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_or_create_conversation(UUID) TO authenticated;
+
+-- Step 3: Triggers
+DROP TRIGGER IF EXISTS on_like_change ON public.likes;
+CREATE TRIGGER on_like_change
+  AFTER INSERT OR DELETE ON public.likes
+  FOR EACH ROW EXECUTE FUNCTION public.update_poem_likes_count();
+
+DROP TRIGGER IF EXISTS on_comment_change ON public.comments;
+CREATE TRIGGER on_comment_change
+  AFTER INSERT OR DELETE ON public.comments
+  FOR EACH ROW EXECUTE FUNCTION public.update_poem_comments_count();
+
+DROP TRIGGER IF EXISTS on_message_insert ON public.messages;
+CREATE TRIGGER on_message_insert
+  AFTER INSERT ON public.messages
+  FOR EACH ROW EXECUTE FUNCTION public.on_message_insert();
+
+-- Step 4: Row Level Security
+ALTER TABLE public.conversations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users view own conversations" ON public.conversations;
+CREATE POLICY "Users view own conversations" ON public.conversations
+  FOR SELECT USING (auth.uid() = user1_id OR auth.uid() = user2_id);
+
+DROP POLICY IF EXISTS "Users create conversations" ON public.conversations;
+CREATE POLICY "Users create conversations" ON public.conversations
+  FOR INSERT WITH CHECK (auth.uid() = user1_id OR auth.uid() = user2_id);
+
+DROP POLICY IF EXISTS "Users view conversation messages" ON public.messages;
+CREATE POLICY "Users view conversation messages" ON public.messages
+  FOR SELECT USING (EXISTS (
+    SELECT 1 FROM public.conversations c
+    WHERE c.id = conversation_id AND (c.user1_id = auth.uid() OR c.user2_id = auth.uid())
+  ));
+
+DROP POLICY IF EXISTS "Users send messages" ON public.messages;
+CREATE POLICY "Users send messages" ON public.messages
+  FOR INSERT WITH CHECK (
+    auth.uid() = sender_id AND EXISTS (
+      SELECT 1 FROM public.conversations c
+      WHERE c.id = conversation_id AND (c.user1_id = auth.uid() OR c.user2_id = auth.uid())
+    )
+  );
+
+DROP POLICY IF EXISTS "Users mark messages read" ON public.messages;
+CREATE POLICY "Users mark messages read" ON public.messages
+  FOR UPDATE USING (EXISTS (
+    SELECT 1 FROM public.conversations c
+    WHERE c.id = conversation_id AND (c.user1_id = auth.uid() OR c.user2_id = auth.uid())
+  ));
+
+DROP POLICY IF EXISTS "Users view own notifications" ON public.notifications;
+CREATE POLICY "Users view own notifications" ON public.notifications
+  FOR SELECT USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users mark own notifications read" ON public.notifications;
+CREATE POLICY "Users mark own notifications read" ON public.notifications
+  FOR UPDATE USING (auth.uid() = user_id);
+
+-- Step 5: Enable Realtime
+DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.notifications; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.messages; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.comments; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.likes; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.poems; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+-- Step 6: Replica identity (only on tables that exist)
 ALTER TABLE public.poems REPLICA IDENTITY FULL;
 ALTER TABLE public.likes REPLICA IDENTITY FULL;
 ALTER TABLE public.comments REPLICA IDENTITY FULL;
 ALTER TABLE public.notifications REPLICA IDENTITY FULL;
+ALTER TABLE public.messages REPLICA IDENTITY FULL;
