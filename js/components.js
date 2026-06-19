@@ -292,33 +292,12 @@ const Components = {
               <a href="#" aria-label="YouTube">YouTube</a>
             </div>
           </div>
-          <div class="footer-links">
-            <h4>Explore</h4>
-            <a href="#/poems">All Poems</a>
-            <a href="#/poets">Poets</a>
-            <a href="#/categories">Categories</a>
-            <a href="#/poems?trending=1">Trending</a>
-          </div>
-          <div class="footer-links">
-            <h4>Community</h4>
-            <a href="#/mushaira">Mushaira Events</a>
-            <a href="#/contests">Contests</a>
-            <a href="#/voice-rooms">Voice Rooms</a>
-            <a href="#/settings">Guidelines</a>
-          </div>
-          <div class="footer-links">
+          <div class="footer-links footer-support-only">
             <h4>Support</h4>
             <a href="#/settings">Help Center</a>
             <a href="#/settings">Contact Us</a>
             <a href="#/settings">Privacy Policy</a>
             <a href="#/settings">Terms of Service</a>
-          </div>
-          <div class="footer-newsletter">
-            <h4>Subscribe to Newsletter</h4>
-            <form id="newsletter-form" class="newsletter-form">
-              <input type="email" placeholder="Your email" required>
-              <button type="submit" class="btn btn-gold">Subscribe</button>
-            </form>
           </div>
         </div>
         <div class="footer-bottom">

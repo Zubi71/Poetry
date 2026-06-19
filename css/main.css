@@ -518,6 +518,60 @@ input:focus, select:focus, textarea:focus {
   margin-bottom: 20px;
 }
 
+.home-mushaira-carousel {
+  position: relative;
+  margin-bottom: 20px;
+  overflow: hidden;
+}
+
+.home-mushaira-carousel-viewport {
+  position: relative;
+  min-height: 120px;
+}
+
+.home-mushaira-slide {
+  display: none;
+  animation: mushairaSlideIn 0.45s ease;
+}
+
+.home-mushaira-slide.active {
+  display: block;
+}
+
+.home-mushaira-dots {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.home-mushaira-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: none;
+  padding: 0;
+  background: var(--border);
+  cursor: pointer;
+  transition: background 0.2s, transform 0.2s;
+}
+
+.home-mushaira-dot.active {
+  background: var(--gold);
+  transform: scale(1.15);
+}
+
+.home-mushaira-location {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+@keyframes mushairaSlideIn {
+  from { opacity: 0; transform: translateX(12px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
 .home-mushaira-live-inner {
   display: flex;
   align-items: center;
@@ -650,7 +704,7 @@ input:focus, select:focus, textarea:focus {
   border-radius: 16px;
   padding: 20px 18px 0;
   background: linear-gradient(145deg, #141414 0%, #0a0a0a 100%);
-  overflow: hidden;
+  overflow: visible;
 }
 
 .poem-card-v2::after {
@@ -721,38 +775,48 @@ input:focus, select:focus, textarea:focus {
   margin-bottom: 16px;
   width: 100%;
   overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
+  overflow-y: visible;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(212, 175, 55, 0.35) transparent;
 }
 
 .poem-content::-webkit-scrollbar {
-  display: none;
-  height: 0;
+  height: 4px;
 }
 
-.poem-content .poem-lines { width: 100%; }
+.poem-content::-webkit-scrollbar-thumb {
+  background: rgba(212, 175, 55, 0.35);
+  border-radius: 4px;
+}
+
+.poem-content .poem-lines { width: 100%; min-width: 0; }
 
 /* ===== Poetry Line Formatting (Single Misra per Line) ===== */
 .poem-lines {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: stretch;
   gap: 10px;
   width: 100%;
-  padding: 16px 8px;
+  padding: 16px 10px;
+  box-sizing: border-box;
 }
 
 .poem-line {
   display: block;
-  white-space: nowrap;
-  font-size: clamp(18px, 3.2vw, 26px);
-  line-height: 2;
-  padding: 4px 12px;
-  text-align: center;
+  width: 100%;
   max-width: 100%;
+  white-space: normal;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+  font-size: clamp(17px, 4vw, 26px);
+  line-height: 2.1;
+  padding: 4px 8px;
+  text-align: center;
   overflow: visible;
   color: var(--text-primary);
+  box-sizing: border-box;
 }
 
 .poem-theme-golden .poem-line,
@@ -1874,8 +1938,12 @@ input:focus, select:focus, textarea:focus {
   max-width: 1200px;
   margin: 0 auto;
   display: grid;
-  grid-template-columns: 2fr 1fr 1fr 1fr 1.5fr;
+  grid-template-columns: 2fr 1fr;
   gap: 32px;
+}
+
+.footer-support-only {
+  align-self: start;
 }
 
 .footer-brand img { width: 48px; margin-bottom: 12px; border-radius: 50%; }

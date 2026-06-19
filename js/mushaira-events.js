@@ -83,33 +83,71 @@ const MushairaEvents = {
   },
 
   _renderHomeLiveStripHtml(events) {
-    const primary = events[0];
-    return `
-      <section class="home-mushaira-live-strip">
+    const slides = events.map((event, i) => `
+      <div class="home-mushaira-slide${i === 0 ? ' active' : ''}" data-slide="${i}">
         <div class="home-mushaira-live-inner content-card-v2 live">
           <span class="live-badge">Live</span>
           <div class="home-mushaira-live-text">
             <h2>Mushaira Live Now</h2>
-            <p><strong>${this._esc(primary.title)}</strong> — ${this._esc(primary.host)} is hosting</p>
+            <p><strong>${this._esc(event.title)}</strong> — ${this._esc(event.host)} is hosting</p>
+            ${event.location ? `<p class="home-mushaira-location">${this._esc(event.location)}</p>` : ''}
           </div>
-          <a href="#/mushaira/live/${primary.id}" class="btn btn-gold">Join Mushaira Live</a>
+          <a href="#/mushaira/live/${event.id}" class="btn btn-gold">Join Mushaira Live</a>
         </div>
-        ${events.length > 1 ? `<p class="home-mushaira-live-more"><a href="#/mushaira">${events.length - 1} more live event${events.length > 2 ? 's' : ''} →</a></p>` : ''}
+      </div>
+    `).join('');
+
+    const dots = events.length > 1 ? `
+      <div class="home-mushaira-dots" role="tablist" aria-label="Live mushaira events">
+        ${events.map((_, i) => `
+          <button type="button" class="home-mushaira-dot${i === 0 ? ' active' : ''}" data-slide="${i}" aria-label="Event ${i + 1}"></button>
+        `).join('')}
+      </div>
+    ` : '';
+
+    return `
+      <section class="home-mushaira-carousel" data-count="${events.length}">
+        <div class="home-mushaira-carousel-viewport">
+          ${slides}
+        </div>
+        ${dots}
       </section>
     `;
   },
 
-  updateLiveBanner() {
-    const root = document.getElementById('mushaira-live-banner-root');
-    if (!root) return;
+  _homeCarouselTimer: null,
 
-    const live = getLiveMushairaEvents();
-    if (!live.length || this._isOnLivePage()) {
-      root.innerHTML = '';
-      return;
+  _initHomeCarousel() {
+    if (this._homeCarouselTimer) {
+      clearInterval(this._homeCarouselTimer);
+      this._homeCarouselTimer = null;
     }
 
-    root.innerHTML = this._renderLiveBannerHtml(live);
+    const carousel = document.querySelector('.home-mushaira-carousel');
+    if (!carousel) return;
+
+    const slides = carousel.querySelectorAll('.home-mushaira-slide');
+    const dots = carousel.querySelectorAll('.home-mushaira-dot');
+    if (slides.length <= 1) return;
+
+    let current = 0;
+
+    const goTo = (index) => {
+      current = (index + slides.length) % slides.length;
+      slides.forEach((s, i) => s.classList.toggle('active', i === current));
+      dots.forEach((d, i) => d.classList.toggle('active', i === current));
+    };
+
+    dots.forEach(dot => {
+      dot.onclick = () => goTo(parseInt(dot.dataset.slide, 10));
+    });
+
+    this._homeCarouselTimer = setInterval(() => goTo(current + 1), 5000);
+  },
+
+  updateLiveBanner() {
+    const root = document.getElementById('mushaira-live-banner-root');
+    if (root) root.innerHTML = '';
   },
 
   updateHomeStrip() {
@@ -118,6 +156,7 @@ const MushairaEvents = {
 
     const live = getLiveMushairaEvents();
     root.innerHTML = live.length ? this._renderHomeLiveStripHtml(live) : '';
+    this._initHomeCarousel();
   },
 
   updateNavBadge() {
@@ -180,6 +219,10 @@ const MushairaEvents = {
     if (this._pollTimer) {
       clearInterval(this._pollTimer);
       this._pollTimer = null;
+    }
+    if (this._homeCarouselTimer) {
+      clearInterval(this._homeCarouselTimer);
+      this._homeCarouselTimer = null;
     }
   },
 
