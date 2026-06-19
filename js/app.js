@@ -210,68 +210,29 @@ const App = {
 
     document.querySelectorAll('.join-event-btn').forEach(btn => {
       btn.onclick = () => {
-        Storage.registerEvent(parseInt(btn.dataset.eventId));
-        Components.showToast('Joined live mushaira!');
+        const eventId = parseInt(btn.dataset.eventId);
+        Storage.registerEvent(eventId);
+        if (btn.dataset.live === '1') {
+          Router.go(`/mushaira/live/${eventId}`);
+        } else {
+          Components.showToast('Successfully registered!');
+          Router.navigate();
+        }
       };
     });
 
-    // Voice rooms
+    document.querySelectorAll('.create-mushaira-btn').forEach(btn => {
+      btn.onclick = () => Pages.showCreateMushairaModal();
+    });
+
+    // Voice rooms list — join navigates to live room (handled by join-room-btn)
     document.querySelectorAll('.join-room-btn').forEach(btn => {
       btn.onclick = () => {
         const roomId = parseInt(btn.dataset.roomId);
-        const room = getVoiceRoomById(roomId);
         Storage.joinRoom(roomId);
         Router.go(`/voice-rooms/${roomId}`);
       };
     });
-
-    document.querySelectorAll('.leave-room-btn').forEach(btn => {
-      btn.onclick = () => {
-        const roomId = parseInt(btn.dataset.roomId);
-        Storage.leaveRoom(roomId);
-        App._stopMic?.();
-        Components.showToast('Left voice room');
-        Router.go('/voice-rooms');
-      };
-    });
-
-    const voiceRoomForm = document.getElementById('voice-room-form');
-    if (voiceRoomForm) {
-      voiceRoomForm.onsubmit = (e) => {
-        e.preventDefault();
-        const input = voiceRoomForm.querySelector('input');
-        const roomId = voiceRoomForm.dataset.roomId;
-        if (!input.value.trim()) return;
-        Storage.addRoomMessage(roomId, input.value.trim());
-        input.value = '';
-        Router.navigate();
-        const msgBox = document.getElementById('voice-room-messages');
-        if (msgBox) msgBox.scrollTop = msgBox.scrollHeight;
-      };
-    }
-
-    const voiceMicBtn = document.getElementById('voice-mic-btn');
-    if (voiceMicBtn) {
-      voiceMicBtn.onclick = async () => {
-        if (voiceMicBtn.classList.contains('active')) {
-          App._stopMic?.();
-          voiceMicBtn.classList.remove('active');
-          Components.showToast('Microphone muted');
-          return;
-        }
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          App._micStream = stream;
-          voiceMicBtn.classList.add('active');
-          Components.showToast('Microphone on — you can speak in the room');
-        } catch {
-          Components.showToast('Microphone access denied. You can still chat by text.', 'error');
-        }
-      };
-    }
-
-    const voiceMsgBox = document.getElementById('voice-room-messages');
-    if (voiceMsgBox) voiceMsgBox.scrollTop = voiceMsgBox.scrollHeight;
 
     const createRoomBtn = document.getElementById('create-room-btn');
     if (createRoomBtn) {
@@ -729,6 +690,22 @@ const App = {
 
     const dashNotif = document.getElementById('dashboard-notifications');
     if (dashNotif) Realtime.loadDashboardNotifications();
+
+    const liveRoom = document.querySelector('.live-room-page');
+    if (liveRoom && typeof VoiceRoomLive !== 'undefined') {
+      VoiceRoomLive.init({
+        roomKey: liveRoom.dataset.roomKey,
+        roomId: liveRoom.dataset.roomId,
+        title: liveRoom.dataset.roomTitle,
+        host: liveRoom.dataset.roomHost,
+        leavePath: liveRoom.dataset.leavePath || '/voice-rooms'
+      });
+      document.getElementById('live-chat-toggle-mobile')?.addEventListener('click', () => {
+        document.querySelector('.live-room-chat-panel')?.classList.toggle('mobile-open');
+      });
+    } else if (typeof VoiceRoomLive !== 'undefined') {
+      VoiceRoomLive.destroy();
+    }
 
     if (!SupabaseClient.isEnabled() || !Auth.isLoggedIn() || Auth.isGuest()) return;
 

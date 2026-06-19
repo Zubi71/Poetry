@@ -15,6 +15,7 @@ const Storage = {
     JOINED_ROOMS: 'urdu_poetry_joined_rooms',
     ROOM_MESSAGES: 'urdu_poetry_room_messages',
     CUSTOM_ROOMS: 'urdu_poetry_custom_rooms',
+    CUSTOM_MUSHAIRA: 'urdu_poetry_custom_mushaira',
     CONTEST_ENTRIES: 'urdu_poetry_contest_entries',
     AD_CLICKS: 'urdu_poetry_ad_clicks',
     AD_VIEWS: 'urdu_poetry_ad_views',
@@ -274,6 +275,17 @@ const Storage = {
     rooms.push(room);
     this.set(this.KEYS.CUSTOM_ROOMS, rooms);
     return room;
+  },
+
+  getCustomMushaira() {
+    return this.get(this.KEYS.CUSTOM_MUSHAIRA, []);
+  },
+
+  addCustomMushaira(event) {
+    const events = this.getCustomMushaira();
+    events.unshift(event);
+    this.set(this.KEYS.CUSTOM_MUSHAIRA, events);
+    return event;
   },
 
   getRoomMessages(roomId) {

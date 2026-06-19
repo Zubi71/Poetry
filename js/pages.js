@@ -309,14 +309,15 @@ const Pages = {
 
   mushaira(params) {
     const registered = Storage.getRegisteredEvents();
-    const liveEvents = APP_DATA.mushairaEvents.filter(e => e.live);
-    const upcoming = APP_DATA.mushairaEvents.filter(e => !e.live);
+    const allEvents = getAllMushairaEvents();
+    const liveEvents = allEvents.filter(e => e.live);
+    const upcoming = allEvents.filter(e => !e.live);
 
     const content = `
       <div class="page-header">
         <h1>Mushaira Events</h1>
         <p>Join live poetry gatherings and upcoming mushairas</p>
-        <a href="#/mushaira/create" class="btn btn-gold">Create Event</a>
+        <a href="#/mushaira" class="btn btn-gold create-mushaira-btn">Create Event</a>
       </div>
       ${liveEvents.length ? `
         <section class="events-section">
@@ -329,7 +330,7 @@ const Pages = {
                 <p>${event.date} · ${event.time} · ${event.location}</p>
                 <p>${event.registered} registered</p>
               </div>
-              <button class="btn btn-gold join-event-btn" data-event-id="${event.id}">Join Now</button>
+              <button class="btn btn-gold join-event-btn" data-event-id="${event.id}" data-live="1">Join Live</button>
             </div>
           `).join('')}
         </section>
@@ -354,6 +355,50 @@ const Pages = {
     return Components.renderAppLayout(content);
   },
 
+  showCreateMushairaModal() {
+    Components.showModal('Create Mushaira Event', `
+      <form id="create-mushaira-form">
+        <div class="form-group"><label>Event Title</label><input type="text" name="title" required placeholder="e.g. Friday Night Mushaira"></div>
+        <div class="form-group"><label>Location</label><input type="text" name="location" placeholder="City, Country"></div>
+      </form>
+    `, '<button type="button" class="btn btn-gold" id="submit-mushaira">Start Live Event</button>');
+    document.getElementById('submit-mushaira').onclick = () => {
+      const form = document.getElementById('create-mushaira-form');
+      const title = form?.title?.value?.trim();
+      if (!title) return;
+      const user = Auth.getCurrentUser();
+      const event = {
+        id: Date.now(),
+        title,
+        date: new Date().toLocaleDateString(),
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        location: form.location?.value?.trim() || 'Online',
+        live: true,
+        registered: 1,
+        host: user.name || 'You'
+      };
+      Storage.addCustomMushaira(event);
+      Components.closeModal();
+      Router.go(`/mushaira/live/${event.id}`);
+    };
+  },
+
+  mushairaLive(params) {
+    const event = getMushairaEventById(params.id);
+    if (!event) {
+      return Components.renderAppLayout('<div class="page-header"><h1>Event not found</h1><a href="#/mushaira" class="btn btn-gold">Back</a></div>');
+    }
+    const content = renderLiveRoomView({
+      roomKey: `mushaira-${event.id}`,
+      roomId: `M-${event.id}${String(Date.now()).slice(-4)}`,
+      title: event.title,
+      host: event.host,
+      backPath: '#/mushaira',
+      leavePath: '/mushaira'
+    });
+    return Components.renderAppLayout(content, { noSidebar: true });
+  },
+
   voiceRooms(params) {
     if (params.id) {
       const roomId = parseInt(params.id);
@@ -362,57 +407,14 @@ const Pages = {
         return Components.renderAppLayout('<div class="page-header"><h1>Room not found</h1><a href="#/voice-rooms" class="btn btn-gold">Back to Rooms</a></div>');
       }
       Storage.joinRoom(roomId);
-      const user = Auth.getCurrentUser();
-      const listeners = APP_DATA.roomListeners[roomId] || [room.host];
-      const messages = Storage.getRoomMessages(roomId);
-
-      const content = `
-        <div class="voice-room-view">
-          <div class="voice-room-header">
-            <a href="#/voice-rooms" class="back-link">${Components.icon('back')}</a>
-            <div class="voice-room-title">
-              <h2>${room.title}</h2>
-              <p>Host: ${room.host} · ${room.participants + 1} in room</p>
-            </div>
-            <span class="live-badge">● Live</span>
-          </div>
-
-          <div class="voice-room-stage">
-            <p class="stage-label">On stage</p>
-            <div class="voice-speakers">
-              ${listeners.slice(0, 6).map((name, i) => `
-                <div class="voice-speaker ${i === 0 ? 'host' : ''} ${name === user.name ? 'me' : ''}">
-                  ${avatarImg(name, 'speaker-avatar', name)}
-                  <span>${name === user.name ? 'You' : name.split(' ')[0]}</span>
-                  <span class="mic-indicator">${i < 2 ? '🎙️' : '🔇'}</span>
-                </div>
-              `).join('')}
-            </div>
-          </div>
-
-          <div class="voice-room-chat">
-            <p class="chat-label">Live discussion</p>
-            <div class="voice-room-messages" id="voice-room-messages">
-              ${messages.map(m => `
-                <div class="chat-message ${m.type === 'me' ? 'sent' : 'received'} ${m.type === 'host' ? 'host-message' : ''}">
-                  ${m.type !== 'me' ? `<strong>${m.from}</strong>` : ''}
-                  <p>${m.text}</p>
-                  <span>${m.time}</span>
-                </div>
-              `).join('')}
-            </div>
-          </div>
-
-          <div class="voice-room-controls">
-            <button type="button" class="mic-btn" id="voice-mic-btn" title="Toggle microphone">🎤</button>
-            <form class="voice-room-form" id="voice-room-form" data-room-id="${roomId}">
-              <input type="text" placeholder="Share poetry or join the discussion..." required maxlength="500">
-              <button type="submit" class="btn btn-gold">Send</button>
-            </form>
-            <button type="button" class="btn btn-outline-gold leave-room-btn" data-room-id="${roomId}">Leave</button>
-          </div>
-        </div>
-      `;
+      const content = renderLiveRoomView({
+        roomKey: `room-${roomId}`,
+        roomId: roomId,
+        title: room.title,
+        host: room.host,
+        backPath: '#/voice-rooms',
+        leavePath: '/voice-rooms'
+      });
       return Components.renderAppLayout(content, { noSidebar: true, showPremium: false });
     }
 

@@ -10,6 +10,7 @@ const Router = {
     { path: '/poem/:id', handler: 'poemDetail' },
     { path: '/top-poets', handler: 'topPoets' },
     { path: '/mushaira', handler: 'mushaira' },
+    { path: '/mushaira/live/:id', handler: 'mushairaLive' },
     { path: '/voice-rooms', handler: 'voiceRooms' },
     { path: '/voice-rooms/:id', handler: 'voiceRooms' },
     { path: '/contests', handler: 'contests' },
@@ -95,7 +96,8 @@ const Router = {
 
     const path = this.getCurrentPath();
     const query = this.getQuery();
-    if (!path.startsWith('/voice-rooms/')) App._stopMic?.();
+    if (!path.startsWith('/voice-rooms/') && !path.startsWith('/mushaira/live/')) VoiceRoomLive?.destroy?.();
+    if (!path.startsWith('/voice-rooms/') && !path.startsWith('/mushaira/live/')) App._stopMic?.();
     const match = this.matchRoute(path);
 
     const app = document.getElementById('app');
@@ -128,6 +130,7 @@ const Router = {
       poemDetail: 'Poem',
       topPoets: 'Top Poets',
       mushaira: 'Mushaira Events',
+      mushairaLive: 'Live Mushaira',
       voiceRooms: 'Voice Chat Rooms',
       contests: 'Contests',
       messages: 'Messages',
