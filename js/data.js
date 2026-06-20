@@ -195,7 +195,7 @@ function getAllMushairaEvents() {
 }
 
 function getLiveMushairaEvents() {
-  return getAllMushairaEvents().filter(e => e.live);
+  return getAllMushairaEvents().filter(e => e.live || e.paused || e.waiting);
 }
 
 function getMushairaEventById(id) {

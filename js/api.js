@@ -643,7 +643,9 @@ const API = {
 
   mapMushairaEvent(row) {
     if (!row) return null;
-    const ended = row.status === 'ended' || !!row.ended_at;
+    const status = row.status || (row.is_live ? 'live' : 'scheduled');
+    const ended = status === 'ended' || !!row.ended_at;
+    const live = status === 'live' || (row.is_live === true && !ended && status !== 'waiting' && status !== 'paused');
     return {
       id: row.id,
       title: row.title,
@@ -653,7 +655,11 @@ const API = {
       location: row.location || 'Online',
       description: row.description || '',
       tags: row.category ? [row.category.charAt(0).toUpperCase() + row.category.slice(1), 'Urdu'] : ['Poetry', 'Shayari', 'Urdu'],
-      live: row.is_live === true && !ended,
+      category: row.category || 'poetry',
+      status,
+      live,
+      waiting: status === 'waiting',
+      paused: status === 'paused',
       ended,
       registered: row.registered_count || 0,
       watching: row.viewer_count || row.registered_count || 0,
@@ -666,8 +672,16 @@ const API = {
       image: row.thumbnail_url || null,
       ownerId: row.user_id,
       userPost: true,
-      created_at: row.created_at
+      created_at: row.created_at,
+      start_time: row.start_time || row.created_at
     };
+  },
+
+  _parseEventDateTime(eventDate, eventTime) {
+    if (!eventDate) return null;
+    const combined = `${eventDate} ${eventTime || '12:00 PM'}`;
+    const d = new Date(combined);
+    return isNaN(d.getTime()) ? new Date(eventDate) : d;
   },
 
   mapVoiceRoom(row) {
@@ -727,14 +741,19 @@ const API = {
       event_date: now.toLocaleDateString(),
       event_time: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       is_live: event.live !== false,
-      registered_count: 1
+      status: event.live !== false ? 'live' : 'scheduled',
+      registered_count: 1,
+      viewer_count: 0,
+      like_count: 0
     }).select().single();
 
     if (error) {
       console.warn('createMushairaEvent:', error.message);
       return null;
     }
-    return this.mapMushairaEvent(data);
+    const mapped = this.mapMushairaEvent(data);
+    if (mapped) await this.ensureHostSpeaker(mapped.id, user);
+    return mapped;
   },
 
   async deleteMushairaEvent(id) {
@@ -792,5 +811,409 @@ const API = {
       return null;
     }
     return this.mapVoiceRoom(data);
+  },
+
+  /* ===== Live Mushaira Session API ===== */
+
+  async updateMushairaEvent(id, updates) {
+    const sb = SupabaseClient.get();
+    const user = Auth.getCurrentUser();
+    if (!sb || !user?.id) return null;
+    const eventId = parseInt(id, 10);
+    const { data, error } = await sb.from('mushaira_events')
+      .update(updates)
+      .eq('id', eventId)
+      .eq('user_id', user.id)
+      .select()
+      .single();
+    if (error) { console.warn('updateMushairaEvent:', error.message); return null; }
+    return data ? this.mapMushairaEvent(data) : null;
+  },
+
+  async adminUpdateMushairaEvent(id, updates) {
+    const sb = SupabaseClient.get();
+    if (!sb) return null;
+    const { data, error } = await sb.from('mushaira_events')
+      .update(updates)
+      .eq('id', parseInt(id, 10))
+      .select()
+      .single();
+    if (error) { console.warn('adminUpdateMushairaEvent:', error.message); return null; }
+    return data ? this.mapMushairaEvent(data) : null;
+  },
+
+  async endMushairaSession(id) {
+    const sb = SupabaseClient.get();
+    const user = Auth.getCurrentUser();
+    if (!sb || !user?.id) return null;
+    const eventId = parseInt(id, 10);
+    const now = new Date().toISOString();
+    const { data: existing } = await sb.from('mushaira_events').select('created_at').eq('id', eventId).single();
+    const duration = existing?.created_at
+      ? Math.max(1, Math.round((Date.now() - new Date(existing.created_at).getTime()) / 60000))
+      : 0;
+    const { data, error } = await sb.from('mushaira_events').update({
+      status: 'ended',
+      is_live: false,
+      ended_at: now,
+      end_time: now,
+      duration_minutes: duration
+    }).eq('id', eventId).eq('user_id', user.id).select().single();
+    if (error) { console.warn('endMushairaSession:', error.message); return null; }
+    return data ? this.mapMushairaEvent(data) : null;
+  },
+
+  async startMushairaSession(id) {
+    return this.updateMushairaEvent(id, { status: 'live', is_live: true });
+  },
+
+  async pauseMushairaSession(id, paused) {
+    return this.updateMushairaEvent(id, { status: paused ? 'paused' : 'live', is_live: !paused });
+  },
+
+  async createScheduledMushairaEvent(event) {
+    const sb = SupabaseClient.get();
+    const user = Auth.getCurrentUser();
+    if (!sb || !user?.id || user.isGuest) return null;
+    const isLiveNow = event.mode === 'live';
+    const isWaiting = event.mode === 'waiting';
+    const { data, error } = await sb.from('mushaira_events').insert({
+      user_id: user.id,
+      host_name: user.name || 'Host',
+      title: event.title,
+      location: event.location || 'Online',
+      description: event.description || '',
+      category: event.category || 'poetry',
+      event_date: event.event_date || new Date().toLocaleDateString(),
+      event_time: event.event_time || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      thumbnail_url: event.thumbnail_url || null,
+      is_live: isLiveNow,
+      status: isLiveNow ? 'live' : (isWaiting ? 'waiting' : 'scheduled'),
+      registered_count: 0,
+      viewer_count: 0,
+      like_count: 0
+    }).select().single();
+    if (error) { console.warn('createScheduledMushairaEvent:', error.message); return null; }
+    const mapped = this.mapMushairaEvent(data);
+    if (mapped) await this.ensureHostSpeaker(mapped.id, user);
+    return mapped;
+  },
+
+  async ensureHostSpeaker(sessionId, user) {
+    const sb = SupabaseClient.get();
+    if (!sb || !user?.id) return;
+    const { data: existing } = await sb.from('session_speakers')
+      .select('id')
+      .eq('session_id', parseInt(sessionId, 10))
+      .eq('user_id', user.id)
+      .maybeSingle();
+    if (existing) return;
+    await sb.from('session_speakers').insert({
+      session_id: parseInt(sessionId, 10),
+      user_id: user.id,
+      display_name: user.name || 'Host',
+      role: 'host',
+      sort_order: 0
+    });
+  },
+
+  async fetchSessionSpeakers(sessionId) {
+    const sb = SupabaseClient.get();
+    if (!sb) return [];
+    const { data } = await sb.from('session_speakers')
+      .select('*')
+      .eq('session_id', parseInt(sessionId, 10))
+      .order('sort_order');
+    return (data || []).map(r => ({
+      id: r.id,
+      name: r.display_name,
+      role: r.role.charAt(0).toUpperCase() + r.role.slice(1),
+      userId: r.user_id,
+      muted: r.is_muted
+    }));
+  },
+
+  async addSessionSpeaker(sessionId, { displayName, role, userId }) {
+    const sb = SupabaseClient.get();
+    if (!sb) return null;
+    const { data, error } = await sb.from('session_speakers').insert({
+      session_id: parseInt(sessionId, 10),
+      user_id: userId || null,
+      display_name: displayName,
+      role: (role || 'speaker').toLowerCase(),
+      sort_order: 99
+    }).select().single();
+    if (error) { console.warn('addSessionSpeaker:', error.message); return null; }
+    return data;
+  },
+
+  async removeSessionSpeaker(speakerId) {
+    const sb = SupabaseClient.get();
+    if (!sb) return false;
+    const { error } = await sb.from('session_speakers').delete().eq('id', parseInt(speakerId, 10));
+    return !error;
+  },
+
+  async joinSessionAudience(sessionId) {
+    const sb = SupabaseClient.get();
+    const user = Auth.getCurrentUser();
+    if (!sb || !user?.id || user.isGuest) return 0;
+    const sid = parseInt(sessionId, 10);
+    await sb.from('session_audience').upsert({ session_id: sid, user_id: user.id }, { onConflict: 'session_id,user_id' });
+    const { count } = await sb.from('session_audience').select('*', { count: 'exact', head: true }).eq('session_id', sid);
+    const viewerCount = count || 0;
+    await sb.from('mushaira_events').update({ viewer_count: viewerCount, registered_count: viewerCount }).eq('id', sid);
+    return viewerCount;
+  },
+
+  async leaveSessionAudience(sessionId) {
+    const sb = SupabaseClient.get();
+    const user = Auth.getCurrentUser();
+    if (!sb || !user?.id) return;
+    const sid = parseInt(sessionId, 10);
+    await sb.from('session_audience').delete().eq('session_id', sid).eq('user_id', user.id);
+    const { count } = await sb.from('session_audience').select('*', { count: 'exact', head: true }).eq('session_id', sid);
+    await sb.from('mushaira_events').update({ viewer_count: count || 0 }).eq('id', sid);
+  },
+
+  async fetchSessionAudience(sessionId, limit = 50) {
+    const sb = SupabaseClient.get();
+    if (!sb) return { list: [], total: 0 };
+    const sid = parseInt(sessionId, 10);
+    const { data, count } = await sb.from('session_audience')
+      .select('user_id, joined_at', { count: 'exact' })
+      .eq('session_id', sid)
+      .order('joined_at', { ascending: false })
+      .limit(limit);
+    const list = (data || []).map((r, i) => ({
+      userId: r.user_id,
+      name: (typeof APP_DATA !== 'undefined' && APP_DATA.poets[i % APP_DATA.poets.length]?.name) || 'Guest',
+      joinedAt: r.joined_at
+    }));
+    return { list, total: count || list.length };
+  },
+
+  async fetchSessionComments(sessionId) {
+    const sb = SupabaseClient.get();
+    if (!sb) return [];
+    const { data } = await sb.from('session_comments')
+      .select('*')
+      .eq('session_id', parseInt(sessionId, 10))
+      .order('is_pinned', { ascending: false })
+      .order('created_at', { ascending: true })
+      .limit(200);
+    return (data || []).map(r => ({
+      id: r.id,
+      from: r.author_name,
+      text: r.message,
+      time: new Date(r.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      type: 'user',
+      userId: r.user_id,
+      pinned: r.is_pinned,
+      dbId: r.id
+    }));
+  },
+
+  async postSessionComment(sessionId, message) {
+    const sb = SupabaseClient.get();
+    const user = Auth.getCurrentUser();
+    if (!sb || !user?.id) return null;
+    const { data, error } = await sb.from('session_comments').insert({
+      session_id: parseInt(sessionId, 10),
+      user_id: user.id,
+      author_name: user.name || 'User',
+      message
+    }).select().single();
+    if (error) { console.warn('postSessionComment:', error.message); return null; }
+    return {
+      id: data.id,
+      dbId: data.id,
+      from: data.author_name,
+      text: data.message,
+      time: new Date(data.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      type: user.id === Auth.getCurrentUser()?.id ? 'user' : 'user',
+      userId: data.user_id,
+      pinned: false
+    };
+  },
+
+  async pinSessionComment(commentId, pinned) {
+    const sb = SupabaseClient.get();
+    if (!sb) return false;
+    const { error } = await sb.from('session_comments').update({ is_pinned: !!pinned }).eq('id', parseInt(commentId, 10));
+    return !error;
+  },
+
+  async deleteSessionComment(commentId) {
+    const sb = SupabaseClient.get();
+    const user = Auth.getCurrentUser();
+    if (!sb || !user?.id) return false;
+    const { error } = await sb.from('session_comments').delete().eq('id', parseInt(commentId, 10)).eq('user_id', user.id);
+    return !error;
+  },
+
+  async postSessionReaction(sessionId, reactionType) {
+    const sb = SupabaseClient.get();
+    const user = Auth.getCurrentUser();
+    if (!sb || !user?.id) return false;
+    const map = { '❤️': 'heart', '👏': 'clap', '🔥': 'fire' };
+    const type = map[reactionType] || reactionType;
+    await sb.from('session_reactions').insert({
+      session_id: parseInt(sessionId, 10),
+      user_id: user.id,
+      reaction_type: type
+    });
+    const { data: ev } = await sb.from('mushaira_events').select('like_count').eq('id', parseInt(sessionId, 10)).single();
+    await sb.from('mushaira_events').update({ like_count: (ev?.like_count || 0) + 1 }).eq('id', parseInt(sessionId, 10));
+    return true;
+  },
+
+  async postSessionDonation(sessionId, { amount, giftType, senderName }) {
+    const sb = SupabaseClient.get();
+    const user = Auth.getCurrentUser();
+    if (!sb || !user?.id) return null;
+    const { data, error } = await sb.from('session_donations').insert({
+      session_id: parseInt(sessionId, 10),
+      sender_id: user.id,
+      sender_name: senderName || user.name || 'Anonymous',
+      amount: parseInt(amount, 10) || 0,
+      gift_type: giftType || 'coin'
+    }).select().single();
+    if (error) { console.warn('postSessionDonation:', error.message); return null; }
+    return data;
+  },
+
+  async fetchSessionDonations(sessionId, limit = 20) {
+    const sb = SupabaseClient.get();
+    if (!sb) return [];
+    const { data } = await sb.from('session_donations')
+      .select('*')
+      .eq('session_id', parseInt(sessionId, 10))
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    return data || [];
+  },
+
+  async setSessionReminders(sessionId, eventDate, eventTime) {
+    const sb = SupabaseClient.get();
+    const user = Auth.getCurrentUser();
+    if (!sb || !user?.id || user.isGuest) return false;
+    const sid = parseInt(sessionId, 10);
+    const start = this._parseEventDateTime(eventDate, eventTime);
+    if (!start || isNaN(start.getTime())) return false;
+    const offsets = [60, 15];
+    for (const mins of offsets) {
+      const remindAt = new Date(start.getTime() - mins * 60000);
+      if (remindAt <= new Date()) continue;
+      await sb.from('session_reminders').upsert({
+        session_id: sid,
+        user_id: user.id,
+        remind_at: remindAt.toISOString(),
+        sent: false
+      }, { onConflict: 'session_id,user_id,remind_at' });
+    }
+    return true;
+  },
+
+  async processDueReminders() {
+    const sb = SupabaseClient.get();
+    const user = Auth.getCurrentUser();
+    if (!sb || !user?.id || user.isGuest) return;
+    const now = new Date().toISOString();
+    const { data } = await sb.from('session_reminders')
+      .select('id, session_id, remind_at')
+      .eq('user_id', user.id)
+      .eq('sent', false)
+      .lte('remind_at', now);
+    for (const r of data || []) {
+      const ev = getMushairaEventById(r.session_id);
+      const title = ev?.title || 'Mushaira event';
+      Storage.addNotification({ type: 'event', text: `Reminder: ${title} starts soon`, eventId: r.session_id, link: `#/mushaira/session/${r.session_id}` });
+      await sb.from('session_reminders').update({ sent: true }).eq('id', r.id);
+    }
+  },
+
+  async requestToSpeak(sessionId) {
+    const sb = SupabaseClient.get();
+    const user = Auth.getCurrentUser();
+    if (!sb || !user?.id) return null;
+    const sid = parseInt(sessionId, 10);
+    const { data: existing } = await sb.from('session_speaker_requests')
+      .select('id').eq('session_id', sid).eq('user_id', user.id).eq('status', 'pending').maybeSingle();
+    if (existing) return existing;
+    const { data, error } = await sb.from('session_speaker_requests').insert({
+      session_id: sid,
+      user_id: user.id,
+      display_name: user.name || 'User',
+      status: 'pending'
+    }).select().single();
+    if (error) { console.warn('requestToSpeak:', error.message); return null; }
+    return data;
+  },
+
+  async fetchSpeakerRequests(sessionId) {
+    const sb = SupabaseClient.get();
+    if (!sb) return [];
+    const { data } = await sb.from('session_speaker_requests')
+      .select('*')
+      .eq('session_id', parseInt(sessionId, 10))
+      .eq('status', 'pending')
+      .order('created_at');
+    return data || [];
+  },
+
+  async resolveSpeakerRequest(requestId, approved) {
+    const sb = SupabaseClient.get();
+    if (!sb) return null;
+    const { data: req } = await sb.from('session_speaker_requests').select('*').eq('id', parseInt(requestId, 10)).single();
+    if (!req) return null;
+    await sb.from('session_speaker_requests').update({ status: approved ? 'approved' : 'denied' }).eq('id', req.id);
+    if (approved) {
+      await this.addSessionSpeaker(req.session_id, { displayName: req.display_name, role: 'guest', userId: req.user_id });
+    }
+    return req;
+  },
+
+  async banSessionUser(sessionId, targetUserId, reason) {
+    const sb = SupabaseClient.get();
+    const user = Auth.getCurrentUser();
+    if (!sb || !user?.id) return false;
+    const { error } = await sb.from('session_bans').upsert({
+      session_id: parseInt(sessionId, 10),
+      user_id: targetUserId,
+      banned_by: user.id,
+      reason: reason || ''
+    }, { onConflict: 'session_id,user_id' });
+    return !error;
+  },
+
+  async isUserBanned(sessionId, userId) {
+    const sb = SupabaseClient.get();
+    if (!sb || !userId) return false;
+    const { data } = await sb.from('session_bans')
+      .select('id')
+      .eq('session_id', parseInt(sessionId, 10))
+      .eq('user_id', userId)
+      .maybeSingle();
+    return !!data;
+  },
+
+  async incrementSessionLike(sessionId) {
+    const sb = SupabaseClient.get();
+    if (!sb) return;
+    const sid = parseInt(sessionId, 10);
+    const { data } = await sb.from('mushaira_events').select('like_count').eq('id', sid).single();
+    await sb.from('mushaira_events').update({ like_count: (data?.like_count || 0) + 1 }).eq('id', sid);
+  },
+
+  searchMushairaEvents(events, query) {
+    if (!query?.trim()) return events;
+    const q = query.trim().toLowerCase();
+    return events.filter(e =>
+      e.title?.toLowerCase().includes(q) ||
+      e.host?.toLowerCase().includes(q) ||
+      (e.tags || []).some(t => t.toLowerCase().includes(q)) ||
+      (e.category || '').toLowerCase().includes(q)
+    );
   }
 };

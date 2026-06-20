@@ -284,24 +284,40 @@ const AdminPanel = {
 
   renderMushaira() {
     const events = getAllMushairaEvents();
+    const live = events.filter(e => e.live);
+    const totalViews = events.reduce((s, e) => s + (e.viewer_count || e.views || 0), 0);
+    const totalLikes = events.reduce((s, e) => s + (e.like_count || e.likes || 0), 0);
     return `
+      <div class="admin-stats-row admin-stats-row-sm">
+        <div class="admin-stat-card"><span class="admin-stat-label">Total Sessions</span><strong class="admin-stat-value">${events.length}</strong></div>
+        <div class="admin-stat-card"><span class="admin-stat-label">Live Now</span><strong class="admin-stat-value">${live.length}</strong></div>
+        <div class="admin-stat-card"><span class="admin-stat-label">Total Viewers</span><strong class="admin-stat-value">${totalViews}</strong></div>
+        <div class="admin-stat-card"><span class="admin-stat-label">Total Likes</span><strong class="admin-stat-value">${totalLikes}</strong></div>
+      </div>
       <div class="admin-card">
         <div class="admin-toolbar">
           <h2>Mushaira Events</h2>
-          <a href="#/mushaira" class="btn btn-gold btn-sm">View Public Page</a>
+          <div class="admin-toolbar-actions">
+            <button type="button" class="btn btn-gold btn-sm" id="admin-create-mushaira">+ Create Event</button>
+            <a href="#/mushaira" class="btn btn-outline-gold btn-sm">View Public Page</a>
+          </div>
         </div>
         <div class="admin-table-wrap">
           <table class="admin-table">
-            <thead><tr><th>Event</th><th>Host</th><th>Location</th><th>Status</th><th>Joined</th><th></th></tr></thead>
+            <thead><tr><th>Event</th><th>Host</th><th>Status</th><th>Viewers</th><th>Likes</th><th>Actions</th></tr></thead>
             <tbody>
               ${events.length ? events.map(e => `
-                <tr>
-                  <td><strong>${this.esc(e.title)}</strong></td>
+                <tr data-event-id="${e.id}">
+                  <td><strong>${this.esc(e.title)}</strong><br><small>${this.esc(e.date || '')} ${this.esc(e.time || '')}</small></td>
                   <td>${this.esc(e.host)}</td>
-                  <td>${this.esc(e.location)}</td>
-                  <td>${e.live ? '<span class="admin-badge live">Live</span>' : '<span class="admin-badge">Scheduled</span>'}</td>
-                  <td>${e.registered || 0}</td>
-                  <td>${e.live ? `<a href="#/mushaira/live/${e.id}" class="btn btn-gold btn-sm">Join</a>` : '—'}</td>
+                  <td>${e.live ? '<span class="admin-badge live">Live</span>' : e.ended ? '<span class="admin-badge">Ended</span>' : e.waiting ? '<span class="admin-badge">Waiting</span>' : '<span class="admin-badge">Scheduled</span>'}</td>
+                  <td>${e.viewer_count || e.registered || 0}</td>
+                  <td>${e.like_count || e.likes || 0}</td>
+                  <td class="admin-actions-cell">
+                    ${e.live || e.waiting ? `<a href="#/mushaira/live/${e.id}" class="btn btn-gold btn-sm">Join</a>` : ''}
+                    <button type="button" class="btn btn-ghost btn-sm admin-edit-mushaira" data-id="${e.id}">Edit</button>
+                    <button type="button" class="btn btn-ghost btn-sm admin-delete-mushaira" data-id="${e.id}">Delete</button>
+                  </td>
                 </tr>
               `).join('') : '<tr><td colspan="6" class="empty-hint">No mushaira events yet.</td></tr>'}
             </tbody>
@@ -309,6 +325,56 @@ const AdminPanel = {
         </div>
       </div>
     `;
+  },
+
+  bindMushairaAdminEvents() {
+    document.getElementById('admin-create-mushaira')?.addEventListener('click', () => Pages.showCreateMushairaModal());
+    document.querySelectorAll('.admin-edit-mushaira').forEach(btn => {
+      btn.onclick = () => this._showEditMushairaModal(parseInt(btn.dataset.id, 10));
+    });
+    document.querySelectorAll('.admin-delete-mushaira').forEach(btn => {
+      btn.onclick = async () => {
+        if (!confirm('Delete this event?')) return;
+        const id = parseInt(btn.dataset.id, 10);
+        if (SupabaseClient.isEnabled()) await API.deleteMushairaEvent(id);
+        else Storage.removeCustomMushaira(id);
+        window.REMOTE_MUSHAIRA_EVENTS = (window.REMOTE_MUSHAIRA_EVENTS || []).filter(e => e.id !== id);
+        Router.navigate();
+      };
+    });
+  },
+
+  _showEditMushairaModal(eventId) {
+    const event = getMushairaEventById(eventId);
+    if (!event) return;
+    Components.showModal('Edit Mushaira Event', `
+      <form id="admin-edit-mushaira-form">
+        <div class="form-group"><label>Title</label><input type="text" name="title" value="${this.esc(event.title)}" required></div>
+        <div class="form-group"><label>Description</label><textarea name="description" rows="2">${this.esc(event.description || '')}</textarea></div>
+        <div class="form-group"><label>Location</label><input type="text" name="location" value="${this.esc(event.location || '')}"></div>
+        <div class="form-group"><label>Category</label><input type="text" name="category" value="${this.esc(event.category || 'poetry')}"></div>
+        <div class="form-group"><label>Replay URL</label><input type="url" name="replay_url" value="${this.esc(event.replay_url || '')}" placeholder="https://…"></div>
+      </form>
+    `, '<button type="button" class="btn btn-gold" id="admin-save-mushaira">Save Changes</button>');
+    document.getElementById('admin-save-mushaira').onclick = async () => {
+      const form = document.getElementById('admin-edit-mushaira-form');
+      const updates = {
+        title: form.title.value.trim(),
+        description: form.description.value.trim(),
+        location: form.location.value.trim(),
+        category: form.category.value.trim(),
+        replay_url: form.replay_url.value.trim() || null
+      };
+      if (SupabaseClient.isEnabled()) {
+        const updated = await API.adminUpdateMushairaEvent(eventId, updates);
+        if (updated) {
+          window.REMOTE_MUSHAIRA_EVENTS = (window.REMOTE_MUSHAIRA_EVENTS || []).map(e => e.id === eventId ? updated : e);
+        }
+      }
+      Components.closeModal();
+      Components.showToast('Event updated');
+      Router.navigate();
+    };
   },
 
   renderReports() {
@@ -640,6 +706,10 @@ const AdminPanel = {
         if (q) Router.go(`/poems?q=${encodeURIComponent(q)}`);
       }
     });
+
+    if (section === 'mushaira' || document.getElementById('admin-create-mushaira')) {
+      this.bindMushairaAdminEvents();
+    }
 
     const saveTagsBtn = document.getElementById('save-tags-btn');
     if (saveTagsBtn) {

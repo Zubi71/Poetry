@@ -147,16 +147,16 @@ See `supabase/live-mushaira-v2.sql` for PostgreSQL tables:
 - [x] Mobile responsive UI shell (Live / Schedule / Ended)
 - [x] Dark + gold theme
 - [x] Join Live → WebRTC room with seats, chat, host end
-- [ ] Real-time audience count (partial — presence in room)
-- [x] Live chat (room chat)
-- [ ] Raise hand system
-- [x] Speaker management (seats + host controls, partial)
-- [x] Schedule reminder (local register)
-- [ ] Replay videos
-- [ ] Donation system
-- [x] Notifications (app notifications page)
-- [x] Admin controls (admin panel + host end event)
-- [ ] Full API + DB schema (SQL provided, migration pending)
+- [x] Real-time audience count (Supabase session_audience)
+- [x] Live chat (persistent + pin/delete)
+- [x] Raise hand system (request queue + host approve)
+- [x] Speaker management (seats + host controls + DB speakers)
+- [x] Schedule reminder (session_reminders + in-app notifications)
+- [x] Replay videos (player UI + replay_url; recording needs Agora/Mux)
+- [x] Donation system (UI + session_donations; payments simulated)
+- [x] Notifications (in-app for live, reminder, gift)
+- [x] Admin controls (CRUD + metrics in admin panel)
+- [x] Full API + DB schema (v2 + v3 SQL)
 
 ---
 

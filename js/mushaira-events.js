@@ -1,5 +1,8 @@
 const MushairaEvents = {
   channel: null,
+  _speakersCache: {},
+  _audienceCache: {},
+  _commentsChannel: null,
 
   async load() {
     if (SupabaseClient.isEnabled()) {
@@ -243,15 +246,41 @@ const MushairaEvents = {
   },
 
   _getSpeakers(event) {
+    const cached = this._speakersCache[event.id];
+    if (cached?.length) return cached;
     const host = event.host || 'Host';
     const poets = APP_DATA.poets.filter(p => p.name !== host).slice(0, 3);
     return [
       { name: host, role: 'Host', muted: false },
-      ...poets.map((p, i) => ({ name: p.name, role: 'Speaker', muted: i === 1 }))
+      ...poets.map((p, i) => ({ name: p.name, role: i === 0 ? 'Speaker' : 'Guest', muted: i === 1 }))
     ];
   },
 
-  _getAudienceAvatars(count = 12) {
+  async _loadSessionCaches(events) {
+    if (!SupabaseClient.isEnabled()) return;
+    const ids = [...new Set(events.slice(0, 12).map(e => e.id))];
+    await Promise.all(ids.map(async (id) => {
+      if (!this._speakersCache[id]?.length) {
+        const speakers = await API.fetchSessionSpeakers(id);
+        if (speakers.length) this._speakersCache[id] = speakers;
+      }
+    }));
+    const live = events.find(e => e.live);
+    if (live) {
+      this._audienceCache[live.id] = await API.fetchSessionAudience(live.id);
+    }
+  },
+
+  _getGuestNames(event) {
+    const speakers = this._getSpeakers(event).filter(s => s.role !== 'Host');
+    return speakers.map(s => s.name.split(' ')[0]).join(', ');
+  },
+
+  _getAudienceAvatars(count = 12, event) {
+    const cached = event && this._audienceCache[event.id];
+    if (cached?.list?.length) {
+      return cached.list.slice(0, count).map(a => a.name);
+    }
     return APP_DATA.poets.slice(0, count).map(p => p.name);
   },
 
@@ -308,7 +337,7 @@ const MushairaEvents = {
       <section class="mushaira-v2-section">
         <div class="mushaira-v2-section-head">
           <h3>Speakers · ${speakers.length}</h3>
-          <button type="button" class="mushaira-v2-link-btn">View all</button>
+          <button type="button" class="mushaira-v2-link-btn view-speakers-btn" data-event-id="${event.id}">View all</button>
         </div>
         <div class="mushaira-v2-speakers">
           ${speakers.map(s => `
@@ -326,13 +355,14 @@ const MushairaEvents = {
   },
 
   renderAudienceSection(event) {
-    const audience = this._getAudienceAvatars(10);
-    const total = event.watching || event.registered || 2400;
+    const cached = this._audienceCache[event.id];
+    const total = cached?.total || event.watching || event.viewer_count || event.registered || 0;
+    const audience = this._getAudienceAvatars(10, event);
     return `
       <section class="mushaira-v2-section">
         <div class="mushaira-v2-section-head">
           <h3>Audience · ${this._formatCount(total)}</h3>
-          <button type="button" class="mushaira-v2-link-btn">View all</button>
+          <button type="button" class="mushaira-v2-link-btn view-audience-btn" data-event-id="${event.id}">View all</button>
         </div>
         <div class="mushaira-v2-audience">
           ${audience.map(name => avatarImg(name, 'mushaira-v2-audience-avatar', name)).join('')}
@@ -360,6 +390,7 @@ const MushairaEvents = {
         <div class="mushaira-v2-schedule-info">
           <span class="mushaira-v2-schedule-time">${this._esc(event.time)}</span>
           <strong>${this._esc(event.host)}</strong>
+          ${this._getGuestNames(event) ? `<span class="mushaira-v2-guests">+ ${this._esc(this._getGuestNames(event))}</span>` : ''}
           <h4>${this._esc(event.title)}</h4>
           <p>${this._esc(event.description || event.location || '')}</p>
         </div>
@@ -476,15 +507,30 @@ const MushairaEvents = {
         <a href="${base}&efilter=views" class="mushaira-v2-subtab ${active === 'views' ? 'active' : ''}">Most Viewed</a>
         <a href="${base}&efilter=poetry" class="mushaira-v2-subtab ${active === 'poetry' ? 'active' : ''}">Poetry</a>
         <a href="${base}&efilter=shayari" class="mushaira-v2-subtab ${active === 'shayari' ? 'active' : ''}">Shayari</a>
+        <a href="${base}&efilter=week" class="mushaira-v2-subtab ${active === 'week' ? 'active' : ''}">This Week</a>
+        <a href="${base}&efilter=month" class="mushaira-v2-subtab ${active === 'month' ? 'active' : ''}">This Month</a>
       </nav>
     `;
   },
 
   _filterEndedEvents(events, filter) {
     let list = [...events];
+    const now = Date.now();
     if (filter === 'views') list.sort((a, b) => (b.views || b.registered || 0) - (a.views || a.registered || 0));
     else if (filter === 'poetry' || filter === 'shayari') {
       list = list.filter(e => (e.tags || []).some(t => t.toLowerCase().includes(filter)));
+    } else if (filter === 'week') {
+      const weekAgo = now - 7 * 86400000;
+      list = list.filter(e => {
+        const d = e.date ? new Date(e.date).getTime() : 0;
+        return d >= weekAgo;
+      });
+    } else if (filter === 'month') {
+      const monthAgo = now - 30 * 86400000;
+      list = list.filter(e => {
+        const d = e.date ? new Date(e.date).getTime() : 0;
+        return d >= monthAgo;
+      });
     }
     return list;
   },
@@ -505,11 +551,18 @@ const MushairaEvents = {
     `;
   },
 
-  showWatchReplay(eventId) {
+  async showWatchReplay(eventId) {
     const event = getMushairaEventById(eventId);
     if (!event) return;
     const views = event.views || event.viewer_count || event.registered || 0;
     const likes = event.likes || event.like_count || 0;
+    let commentsHtml = '';
+    if (SupabaseClient.isEnabled()) {
+      const comments = await API.fetchSessionComments(eventId);
+      if (comments.length) {
+        commentsHtml = `<div class="replay-comments"><h4>Comments</h4>${comments.slice(-8).map(c => `<p><strong>${this._esc(c.from)}:</strong> ${this._esc(c.text)}</p>`).join('')}</div>`;
+      }
+    }
     Components.showModal(event.title, `
       <div class="replay-modal">
         <div class="replay-player">
@@ -527,15 +580,105 @@ const MushairaEvents = {
         </div>
         <div class="mushaira-v2-tags">${this._renderTags(event.tags)}</div>
         <p class="replay-desc">${this._esc(event.description || '')}</p>
+        ${commentsHtml}
+        <div class="replay-actions">
+          <button type="button" class="btn btn-outline-gold btn-sm replay-like-btn" data-event-id="${event.id}">❤️ Like (${this._formatCount(likes)})</button>
+          <button type="button" class="btn btn-outline-gold btn-sm replay-share-btn">↗ Share</button>
+        </div>
       </div>
-    `, `<button type="button" class="btn btn-gold session-details-btn" data-event-id="${event.id}">Session Details</button>`);
-    document.querySelector('.modal-footer .session-details-btn')?.addEventListener('click', () => {
-      Components.closeModal();
-      this.showSessionDetails(event.id);
+    `, `<a href="#/mushaira/session/${event.id}" class="btn btn-gold">Session Details</a>`);
+    document.querySelector('.replay-like-btn')?.addEventListener('click', async () => {
+      if (SupabaseClient.isEnabled()) await API.incrementSessionLike(event.id);
+      Components.showToast('Liked!');
     });
+    document.querySelector('.replay-share-btn')?.addEventListener('click', async () => {
+      const url = `${location.origin}${location.pathname}#/mushaira/session/${event.id}`;
+      await navigator.clipboard.writeText(url);
+      Components.showToast('Link copied!');
+    });
+    document.querySelector('.modal-footer .btn-gold')?.addEventListener('click', () => Components.closeModal());
+  },
+
+  showViewAllSpeakers(eventId) {
+    const event = getMushairaEventById(eventId);
+    if (!event) return;
+    const speakers = this._getSpeakers(event);
+    Components.showModal(`Speakers · ${speakers.length}`, `
+      <ul class="session-list-modal">
+        ${speakers.map(s => `
+          <li class="session-list-item">
+            ${avatarImg(s.name, 'session-list-avatar', s.name)}
+            <div><strong>${this._esc(s.name)}</strong><span class="mushaira-v2-speaker-role ${s.role === 'Host' ? 'is-host' : ''}">${this._esc(s.role)}</span></div>
+          </li>
+        `).join('')}
+      </ul>
+    `);
+  },
+
+  async showViewAllAudience(eventId) {
+    const event = getMushairaEventById(eventId);
+    if (!event) return;
+    let list = this._audienceCache[eventId]?.list;
+    let total = this._audienceCache[eventId]?.total;
+    if (SupabaseClient.isEnabled() && !list?.length) {
+      const data = await API.fetchSessionAudience(eventId, 100);
+      this._audienceCache[eventId] = data;
+      list = data.list;
+      total = data.total;
+    }
+    list = list || this._getAudienceAvatars(20, event).map(name => ({ name }));
+    total = total || list.length;
+    Components.showModal(`Audience · ${this._formatCount(total)}`, `
+      <div class="session-audience-grid">
+        ${list.map(a => `
+          <div class="session-audience-item">${avatarImg(a.name, 'mushaira-v2-audience-avatar', a.name)}<span>${this._esc(a.name.split(' ')[0])}</span></div>
+        `).join('')}
+      </div>
+    `);
+  },
+
+  renderSessionDetailsPage(event) {
+    const speakers = this._getSpeakers(event).map(s => `${s.name} (${s.role})`).join(', ');
+    const actionBtn = event.live
+      ? `<a href="#/mushaira/live/${event.id}" class="btn btn-gold">Join Live</a>`
+      : event.ended && event.replay_url
+        ? `<button type="button" class="btn btn-gold watch-replay-btn" data-event-id="${event.id}">Watch Replay</button>`
+        : event.waiting
+          ? `<a href="#/mushaira/live/${event.id}" class="btn btn-gold">Enter Waiting Room</a>`
+          : `<button type="button" class="btn btn-gold register-event-btn" data-event-id="${event.id}">Set Reminder</button>`;
+    return `
+      <div class="mushaira-v2 session-details-page">
+        <a href="#/mushaira" class="session-details-back">← Back to Mushaira</a>
+        <img class="session-details-cover" src="${this._eventImage(event)}" alt="">
+        <h1>${this._esc(event.title)}</h1>
+        <div class="mushaira-v2-tags">${this._renderTags(event.tags)}</div>
+        <p class="session-details-desc">${this._esc(event.description || 'Join this mushaira session for live poetry.')}</p>
+        <ul class="session-details-meta">
+          <li><strong>Host:</strong> ${this._esc(event.host)}</li>
+          <li><strong>When:</strong> ${this._esc(event.date)} · ${this._esc(event.time)}</li>
+          <li><strong>Duration:</strong> ${event.duration_minutes ? `${event.duration_minutes} min` : 'TBD'}</li>
+          <li><strong>Location:</strong> ${this._esc(event.location || 'Online')}</li>
+          <li><strong>Speakers:</strong> ${this._esc(speakers)}</li>
+          ${event.ended ? `<li><strong>Views:</strong> ${this._formatCount(event.views || 0)} · <strong>Likes:</strong> ${this._formatCount(event.likes || 0)}</li>` : ''}
+        </ul>
+        <div class="session-details-actions">${actionBtn}</div>
+      </div>
+    `;
+  },
+
+  async _registerReminder(event) {
+    Storage.registerEvent(event.id);
+    if (SupabaseClient.isEnabled()) {
+      await API.setSessionReminders(event.id, event.date, event.time);
+    }
+    Components.showToast('Reminder set — we\'ll notify you 1 hour and 15 minutes before start');
   },
 
   showSessionDetails(eventId) {
+    Router.go(`/mushaira/session/${eventId}`);
+  },
+
+  renderSessionDetailsModal(eventId) {
     const event = getMushairaEventById(eventId);
     if (!event) return;
     const speakers = this._getSpeakers(event).map(s => `${s.name} (${s.role})`).join(', ');
@@ -546,6 +689,7 @@ const MushairaEvents = {
         <ul class="session-details-meta">
           <li><strong>Host:</strong> ${this._esc(event.host)}</li>
           <li><strong>When:</strong> ${this._esc(event.date)} · ${this._esc(event.time)}</li>
+          <li><strong>Duration:</strong> ${event.duration_minutes ? `${event.duration_minutes} min` : 'TBD'}</li>
           <li><strong>Location:</strong> ${this._esc(event.location || 'Online')}</li>
           <li><strong>Speakers:</strong> ${this._esc(speakers)}</li>
         </ul>
@@ -553,11 +697,12 @@ const MushairaEvents = {
       </div>
     `, event.live
       ? `<a href="#/mushaira/live/${event.id}" class="btn btn-gold">Join Live</a>`
-      : `<button type="button" class="btn btn-gold register-event-btn" data-event-id="${event.id}">Set Reminder</button>`);
-    document.querySelector('.modal-footer .register-event-btn')?.addEventListener('click', () => {
-      Storage.registerEvent(event.id);
+      : event.waiting
+        ? `<a href="#/mushaira/live/${event.id}" class="btn btn-gold">Enter Waiting Room</a>`
+        : `<button type="button" class="btn btn-gold register-event-btn" data-event-id="${event.id}">Set Reminder</button>`);
+    document.querySelector('.modal-footer .register-event-btn')?.addEventListener('click', async () => {
+      await this._registerReminder(event);
       Components.closeModal();
-      Components.showToast('Reminder set — we\'ll notify you before start');
       this.renderLists();
     });
   },
@@ -596,13 +741,15 @@ const MushairaEvents = {
     if (!root) return;
 
     const registered = Storage.getRegisteredEvents();
-    const allEvents = getAllMushairaEvents();
+    const searchQuery = root.dataset.search || '';
+    let allEvents = getAllMushairaEvents();
+    if (searchQuery) allEvents = API.searchMushairaEvents(allEvents, searchQuery);
     const tab = root.dataset.tab || this._getActiveTab();
     const scheduleFilter = root.dataset.scheduleFilter || 'all';
     const endedFilter = root.dataset.endedFilter || 'all';
-    const liveEvents = allEvents.filter(e => e.live);
-    const endedEvents = allEvents.filter(e => !e.live && e.ended);
-    const scheduledEvents = allEvents.filter(e => !e.live && !e.ended);
+    const liveEvents = allEvents.filter(e => e.live || e.paused);
+    const endedEvents = allEvents.filter(e => e.ended);
+    const scheduledEvents = allEvents.filter(e => !e.live && !e.ended && !e.paused);
 
     let html = '';
     if (tab === 'schedule') {
@@ -629,15 +776,20 @@ const MushairaEvents = {
       };
     });
     document.querySelectorAll('.register-event-btn').forEach(btn => {
-      btn.onclick = () => {
-        Storage.registerEvent(parseInt(btn.dataset.eventId));
-        Components.showToast('Reminder set!');
+      btn.onclick = async () => {
+        const event = getMushairaEventById(btn.dataset.eventId);
+        if (event) await this._registerReminder(event);
+        else Storage.registerEvent(parseInt(btn.dataset.eventId));
         this.renderLists();
       };
     });
 
-    document.querySelectorAll('.mushaira-v2-link-btn').forEach(btn => {
-      btn.onclick = () => Components.showToast('Full list coming soon');
+    document.querySelectorAll('.view-speakers-btn').forEach(btn => {
+      btn.onclick = () => this.showViewAllSpeakers(parseInt(btn.dataset.eventId, 10));
+    });
+
+    document.querySelectorAll('.view-audience-btn').forEach(btn => {
+      btn.onclick = () => this.showViewAllAudience(parseInt(btn.dataset.eventId, 10));
     });
 
     document.querySelectorAll('.session-details-btn').forEach(btn => {
@@ -664,6 +816,29 @@ const MushairaEvents = {
         <a href="#/mushaira/live/${event.id}" class="btn btn-gold btn-sm">Join Live</a>
       </div>
     `).join('');
+  },
+
+  async initSessionPage(eventId) {
+    const root = document.getElementById('mushaira-session-root');
+    if (!root) return;
+    await this.load();
+    let event = getMushairaEventById(eventId);
+    if (!event && SupabaseClient.isEnabled()) {
+      event = await API.fetchMushairaEventById(eventId);
+      if (event) {
+        const list = window.REMOTE_MUSHAIRA_EVENTS || [];
+        if (!list.find(e => e.id === event.id)) {
+          window.REMOTE_MUSHAIRA_EVENTS = [event, ...list];
+        }
+      }
+    }
+    if (!event) {
+      root.innerHTML = '<div class="page-header"><h1>Session not found</h1><a href="#/mushaira" class="btn btn-gold">Back</a></div>';
+      return;
+    }
+    await this._loadSessionCaches([event]);
+    root.innerHTML = this.renderSessionDetailsPage(event);
+    this._bindEventButtons();
   },
 
   async initLivePage(eventId) {
@@ -698,6 +873,7 @@ const MushairaEvents = {
       hostOwnerId: event.ownerId || '',
       eventId: event.id,
       roomType: 'mushaira',
+      sessionStatus: event.status || (event.live ? 'live' : 'scheduled'),
       maxSeats: LIVE_ROOM.MUSHAIRA_SEATS,
       backPath: '#/mushaira',
       leavePath: '/mushaira'
@@ -713,6 +889,7 @@ const MushairaEvents = {
         hostOwnerId: liveRoom.dataset.hostOwnerId || null,
         eventId: parseInt(liveRoom.dataset.eventId, 10) || event.id,
         roomType: liveRoom.dataset.roomType || 'mushaira',
+        sessionStatus: liveRoom.dataset.sessionStatus || 'live',
         maxSeats: parseInt(liveRoom.dataset.maxSeats, 10) || LIVE_ROOM.MUSHAIRA_SEATS,
         leavePath: liveRoom.dataset.leavePath || '/mushaira'
       });
@@ -723,9 +900,20 @@ const MushairaEvents = {
     const root = document.getElementById('mushaira-events-root');
     if (!root) return;
     await this.load();
+    if (SupabaseClient.isEnabled()) await API.processDueReminders();
+    const allEvents = getAllMushairaEvents();
+    await this._loadSessionCaches(allEvents);
     this.renderLists();
     this.subscribe();
     this._startPoll();
+
+    const searchInput = document.getElementById('mushaira-search-input');
+    if (searchInput) {
+      searchInput.addEventListener('input', () => {
+        root.dataset.search = searchInput.value.trim();
+        this.renderLists();
+      });
+    }
   },
 
   _pollTimer: null,
@@ -740,6 +928,8 @@ const MushairaEvents = {
         return;
       }
       await this.load();
+      const allEvents = getAllMushairaEvents();
+      await this._loadSessionCaches(allEvents);
       this.renderLists();
       this.updateLiveUI();
     }, 10000);

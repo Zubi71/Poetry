@@ -353,7 +353,11 @@ const Pages = {
           <a href="#/mushaira?tab=ended" class="mushaira-v2-tab ${tab === 'ended' ? 'active' : ''}">Ended</a>
         </nav>
 
-        <div id="mushaira-events-root" data-tab="${tab}" data-schedule-filter="${query.filter || 'all'}" data-ended-filter="${query.efilter || 'all'}">
+        <div class="mushaira-v2-search-wrap">
+          <input type="search" id="mushaira-search-input" class="mushaira-v2-search" placeholder="Search poet, title, category…" value="${query.q || ''}" aria-label="Search mushaira">
+        </div>
+
+        <div id="mushaira-events-root" data-tab="${tab}" data-schedule-filter="${query.filter || 'all'}" data-ended-filter="${query.efilter || 'all'}" data-search="${query.q || ''}">
           <p class="loading-inline">Loading events...</p>
         </div>
 
@@ -368,8 +372,28 @@ const Pages = {
       <form id="create-mushaira-form">
         <div class="form-group"><label>Event Title</label><input type="text" name="title" required placeholder="e.g. Friday Night Mushaira"></div>
         <div class="form-group"><label>Location</label><input type="text" name="location" placeholder="City, Country"></div>
+        <div class="form-group"><label>Description</label><textarea name="description" rows="2" placeholder="What will poets recite?"></textarea></div>
+        <div class="form-group"><label>Category</label>
+          <select name="category"><option value="poetry">Poetry</option><option value="shayari">Shayari</option><option value="ghazal">Ghazal</option></select>
+        </div>
+        <div class="form-group"><label>Mode</label>
+          <select name="mode">
+            <option value="live">Start Live Now</option>
+            <option value="waiting">Waiting Room (Start Later)</option>
+            <option value="schedule">Schedule for Later</option>
+          </select>
+        </div>
+        <div class="form-group schedule-fields" hidden>
+          <label>Date</label><input type="date" name="event_date">
+          <label>Time</label><input type="time" name="event_time">
+        </div>
       </form>
-    `, '<button type="button" class="btn btn-gold" id="submit-mushaira">Start Live Event</button>');
+    `, '<button type="button" class="btn btn-gold" id="submit-mushaira">Create Event</button>');
+    const modeSelect = document.querySelector('#create-mushaira-form select[name="mode"]');
+    const schedFields = document.querySelector('.schedule-fields');
+    modeSelect?.addEventListener('change', () => {
+      schedFields.hidden = modeSelect.value !== 'schedule';
+    });
     document.getElementById('submit-mushaira').onclick = async () => {
       const form = document.getElementById('create-mushaira-form');
       const title = form?.title?.value?.trim();
@@ -382,13 +406,20 @@ const Pages = {
       if (btn) { btn.disabled = true; btn.textContent = 'Creating...'; }
 
       const location = form.location?.value?.trim() || 'Online';
+      const description = form.description?.value?.trim() || '';
+      const category = form.category?.value || 'poetry';
+      const mode = form.mode?.value || 'live';
       let event = null;
 
       if (SupabaseClient.isEnabled()) {
-        event = await API.createMushairaEvent({ title, location, live: true });
+        event = await API.createScheduledMushairaEvent({
+          title, location, description, category, mode,
+          event_date: form.event_date?.value || new Date().toLocaleDateString(),
+          event_time: form.event_time?.value || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        });
         if (!event) {
-          Components.showToast('Could not create event online. Run supabase/mushaira-events.sql in Supabase.', 'error');
-          if (btn) { btn.disabled = false; btn.textContent = 'Start Live Event'; }
+          Components.showToast('Could not create event online. Check Supabase setup.', 'error');
+          if (btn) { btn.disabled = false; btn.textContent = 'Create Event'; }
           return;
         }
         window.REMOTE_MUSHAIRA_EVENTS = [event, ...(window.REMOTE_MUSHAIRA_EVENTS || [])];
@@ -398,10 +429,13 @@ const Pages = {
         event = {
           id: Date.now(),
           title,
-          date: new Date().toLocaleDateString(),
-          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          date: form.event_date?.value || new Date().toLocaleDateString(),
+          time: form.event_time?.value || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           location,
-          live: true,
+          description,
+          tags: [category.charAt(0).toUpperCase() + category.slice(1), 'Urdu'],
+          live: mode === 'live',
+          waiting: mode === 'waiting',
           registered: 1,
           host: user.name || 'You'
         };
@@ -409,10 +443,23 @@ const Pages = {
         if (typeof MushairaEvents !== 'undefined') MushairaEvents.updateLiveUI();
       }
 
-      if (btn) { btn.disabled = false; btn.textContent = 'Start Live Event'; }
+      if (btn) { btn.disabled = false; btn.textContent = 'Create Event'; }
       Components.closeModal();
-      Router.go(`/mushaira/live/${event.id}`);
+      if (mode === 'live' || mode === 'waiting') {
+        Router.go(`/mushaira/live/${event.id}`);
+      } else {
+        Components.showToast('Event scheduled!');
+        Router.go('/mushaira?tab=schedule');
+      }
     };
+  },
+
+  async mushairaSession(params) {
+    return Components.renderAppLayout(`
+      <div id="mushaira-session-root" data-id="${params.id}">
+        <p class="loading-inline">Loading session…</p>
+      </div>
+    `, { noSidebar: true });
   },
 
   mushairaLive(params) {

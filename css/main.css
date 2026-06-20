@@ -989,6 +989,193 @@ input:focus, select:focus, textarea:focus {
   line-height: 1.5;
 }
 
+.mushaira-v2-search-wrap {
+  margin-bottom: 16px;
+}
+
+.mushaira-v2-search {
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-size: 14px;
+  font-family: inherit;
+}
+
+.mushaira-v2-guests {
+  display: block;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin: 2px 0 4px;
+}
+
+.session-details-page {
+  max-width: 520px;
+  margin: 0 auto;
+  padding-bottom: 80px;
+}
+
+.session-details-back {
+  display: inline-block;
+  margin-bottom: 16px;
+  color: var(--gold);
+  font-size: 14px;
+}
+
+.session-details-page h1 {
+  font-size: 22px;
+  margin: 12px 0;
+}
+
+.session-details-actions {
+  margin-top: 20px;
+}
+
+.session-list-modal {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.session-list-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.session-audience-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  text-align: center;
+  font-size: 11px;
+}
+
+.live-waiting-room {
+  margin: 0 16px 16px;
+  padding: 24px;
+  text-align: center;
+  background: rgba(212, 175, 55, 0.08);
+  border: 1px solid rgba(212, 175, 55, 0.3);
+  border-radius: var(--radius);
+}
+
+.live-waiting-room h2 {
+  margin: 0 0 8px;
+  color: var(--gold);
+}
+
+.live-hand-requests {
+  margin: 0 16px 12px;
+  padding: 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.live-hand-requests h3 {
+  font-size: 13px;
+  margin: 0 0 8px;
+}
+
+.live-hand-request-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  font-size: 13px;
+}
+
+.live-v2-donations-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+}
+
+.live-v2-donations-card h3 {
+  font-size: 13px;
+  margin: 0 0 8px;
+}
+
+.live-donation-item {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.donation-picker {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.donation-choice {
+  padding: 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-hover);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.donation-choice:hover {
+  border-color: var(--gold);
+}
+
+.live-chat-msg.pinned {
+  border-left: 3px solid var(--gold);
+  padding-left: 8px;
+}
+
+.live-chat-pin {
+  font-size: 11px;
+  margin-left: 4px;
+}
+
+.live-chat-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.live-chat-action {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 10px;
+  cursor: pointer;
+  font-family: inherit;
+  text-decoration: underline;
+}
+
+.live-v2-badge.paused {
+  background: #ef4444;
+}
+
+.replay-comments {
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.replay-comments h4 {
+  font-size: 13px;
+  margin: 0 0 8px;
+}
+
+.replay-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
 .mushaira-v2-join {
   width: 100%;
   display: inline-flex;

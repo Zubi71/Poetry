@@ -32,6 +32,9 @@ const VoiceRoomLive = {
   _storageKey: null,
   _speakInterval: null,
   _audioCtx: null,
+  _paused: false,
+  _sessionCommentsChannel: null,
+  _handRequests: [],
 
   get maxSlots() {
     if (this.roomMeta?.maxSeats) return this.roomMeta.maxSeats;
@@ -54,9 +57,26 @@ const VoiceRoomLive = {
       return;
     }
 
+    const eventId = meta.eventId;
+    if (eventId && SupabaseClient.isEnabled()) {
+      const banned = await API.isUserBanned(eventId, Auth.getCurrentUser()?.id);
+      if (banned) {
+        Components.showToast('You have been banned from this session', 'error');
+        Router.go(meta.leavePath || '/mushaira');
+        return;
+      }
+      await API.joinSessionAudience(eventId);
+      this._audienceCount = await API.fetchSessionAudience(eventId).then(d => d.total).catch(() => 0);
+    }
+
+    this._applySessionStatus(meta.sessionStatus);
+    await this._loadSessionChat(eventId);
+    this._subscribeSessionComments(eventId);
     this._renderSlots();
     this._renderParticipantList();
     this._renderChat();
+    this._renderDonations();
+    this._renderHandRequests();
     this._bindControls();
     this._updateHostPanelVisibility();
 
@@ -69,6 +89,10 @@ const VoiceRoomLive = {
     this._appendSystemMessage(
       `Welcome to ${meta.title}! Tap "Check In" or pick a seat (${this.maxSlots} max), then turn on your mic to speak.`
     );
+
+    if (this._isHost() && this.roomMeta?.eventId) {
+      this._handPollTimer = setInterval(() => this._renderHandRequests(), 5000);
+    }
   },
 
   destroy() {
@@ -77,10 +101,23 @@ const VoiceRoomLive = {
       window.removeEventListener('storage', this._onStorageSync);
       this._onStorageSync = null;
     }
+    if (this._handPollTimer) {
+      clearInterval(this._handPollTimer);
+      this._handPollTimer = null;
+    }
+    if (this._sessionCommentsChannel && sb) {
+      try { sb.removeChannel(this._sessionCommentsChannel); } catch (_) {}
+    }
+    this._sessionCommentsChannel = null;
     if (this.channel && sb) {
       try { sb.removeChannel(this.channel); } catch (_) {}
     }
+    const eventId = this.roomMeta?.eventId;
+    if (eventId && SupabaseClient.isEnabled()) {
+      API.leaveSessionAudience(eventId);
+    }
     if (this._pollTimer) clearInterval(this._pollTimer);
+    if (this._handPollTimer) clearInterval(this._handPollTimer);
     this._stopSpeakingMonitor();
     this._stopMicTracks();
     this._closeAllPeers();
@@ -336,14 +373,23 @@ const VoiceRoomLive = {
       pauseBtn.hidden = !(isHost && isMushaira);
       pauseBtn.textContent = this._paused ? 'Resume Live' : 'Pause Live';
     }
+    this._renderHandRequests();
   },
 
-  _togglePauseLive() {
+  async _togglePauseLive() {
     if (!this._isHost()) return;
     this._paused = !this._paused;
     const banner = document.getElementById('live-paused-banner');
     if (banner) banner.hidden = !this._paused;
     document.querySelector('.live-room-v2')?.classList.toggle('is-paused', this._paused);
+    const badge = document.querySelector('.live-v2-badge');
+    if (badge) badge.classList.toggle('paused', this._paused);
+    if (this.roomMeta?.eventId && SupabaseClient.isEnabled()) {
+      await API.pauseMushairaSession(this.roomMeta.eventId, this._paused);
+    }
+    if (this.channel) {
+      this.channel.send({ type: 'broadcast', event: 'host_action', payload: { action: this._paused ? 'pause' : 'resume' } });
+    }
     this._appendSystemMessage(this._paused ? 'Session paused by host' : 'Session resumed');
     this._updateHostPanelVisibility();
     Components.showToast(this._paused ? 'Live session paused' : 'Live session resumed');
@@ -533,7 +579,11 @@ const VoiceRoomLive = {
     document.getElementById('live-end-event-btn')?.addEventListener('click', () => this._confirmEndMushairaEvent());
     document.getElementById('live-pause-btn')?.addEventListener('click', () => this._togglePauseLive());
 
-    document.getElementById('live-raise-hand-btn')?.addEventListener('click', () => {
+    document.getElementById('live-raise-hand-btn')?.addEventListener('click', async () => {
+      if (this.roomMeta?.eventId && SupabaseClient.isEnabled()) {
+        await API.requestToSpeak(this.roomMeta.eventId);
+        if (this._isHost()) this._renderHandRequests();
+      }
       this._appendSystemMessage(`${Auth.getCurrentUser()?.name || 'Someone'} raised their hand to speak`);
       this.sendChat('✋ Request to speak');
       Components.showToast('Hand raised — host will review your request');
@@ -548,8 +598,11 @@ const VoiceRoomLive = {
         </div>
       `);
       document.querySelectorAll('.live-react-choice').forEach(btn => {
-        btn.onclick = () => {
+        btn.onclick = async () => {
           const emoji = btn.dataset.emoji;
+          if (this.roomMeta?.eventId && SupabaseClient.isEnabled()) {
+            await API.postSessionReaction(this.roomMeta.eventId, emoji);
+          }
           this.sendChat(emoji);
           Components.closeModal();
           Components.showToast(`Sent ${emoji}`);
@@ -567,6 +620,9 @@ const VoiceRoomLive = {
         }
       } catch (_) {}
     });
+
+    document.getElementById('live-donate-btn')?.addEventListener('click', () => this._showDonationModal());
+    document.getElementById('live-start-btn')?.addEventListener('click', () => this._startLiveSession());
 
     const form = document.getElementById('live-room-chat-form');
     form?.addEventListener('submit', (e) => {
@@ -867,6 +923,156 @@ const VoiceRoomLive = {
     audio.play().catch(() => {});
   },
 
+  _applySessionStatus(status) {
+    const waiting = status === 'waiting';
+    const paused = status === 'paused';
+    this._paused = paused;
+    const waitEl = document.getElementById('live-waiting-room');
+    const startBtn = document.getElementById('live-start-btn');
+    const badge = document.querySelector('.live-v2-badge');
+    if (waitEl) waitEl.hidden = !waiting;
+    if (startBtn) startBtn.hidden = !(waiting && this._isHost());
+    if (badge) {
+      badge.textContent = waiting ? 'SOON' : paused ? 'PAUSED' : 'LIVE';
+      badge.classList.toggle('paused', paused);
+    }
+    const banner = document.getElementById('live-paused-banner');
+    if (banner) banner.hidden = !paused;
+    document.querySelector('.live-room-v2')?.classList.toggle('is-paused', paused);
+  },
+
+  async _loadSessionChat(eventId) {
+    if (!eventId || !SupabaseClient.isEnabled()) return;
+    const comments = await API.fetchSessionComments(eventId);
+    this.chatMessages = comments;
+    this._renderChat();
+  },
+
+  _subscribeSessionComments(eventId) {
+    if (!eventId || !SupabaseClient.isEnabled()) return;
+    const sb = SupabaseClient.get();
+    if (!sb) return;
+    this._sessionCommentsChannel = sb.channel(`session-comments-${eventId}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'session_comments', filter: `session_id=eq.${eventId}` }, (payload) => {
+        const row = payload.new;
+        const msg = {
+          id: row.id,
+          dbId: row.id,
+          from: row.author_name,
+          text: row.message,
+          time: new Date(row.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          type: 'user',
+          userId: row.user_id,
+          pinned: row.is_pinned
+        };
+        if (!this.chatMessages.find(m => m.dbId === msg.dbId)) {
+          this._appendChatMessage(msg, false);
+        }
+      })
+      .subscribe();
+  },
+
+  async _renderDonations() {
+    const box = document.getElementById('live-donations-list');
+    if (!box || !this.roomMeta?.eventId) return;
+    const donations = SupabaseClient.isEnabled()
+      ? await API.fetchSessionDonations(this.roomMeta.eventId, 10)
+      : [];
+    if (!donations.length) {
+      box.innerHTML = '<p class="empty-hint">No gifts yet — be the first!</p>';
+      return;
+    }
+    box.innerHTML = donations.map(d => `
+      <div class="live-donation-item">
+        <strong>${this._escape(d.sender_name)}</strong>
+        <span>${d.gift_type === 'star' ? '⭐' : d.gift_type === 'gift' ? '🎁' : '🪙'} ${d.amount}</span>
+      </div>
+    `).join('');
+  },
+
+  async _renderHandRequests() {
+    const panel = document.getElementById('live-hand-requests');
+    if (!panel || !this._isHost() || !this.roomMeta?.eventId) {
+      if (panel) panel.hidden = true;
+      return;
+    }
+    panel.hidden = false;
+    this._handRequests = SupabaseClient.isEnabled()
+      ? await API.fetchSpeakerRequests(this.roomMeta.eventId)
+      : [];
+    const list = document.getElementById('live-hand-requests-list');
+    if (!list) return;
+    if (!this._handRequests.length) {
+      list.innerHTML = '<p class="empty-hint">No hand raise requests</p>';
+      return;
+    }
+    list.innerHTML = this._handRequests.map(r => `
+      <div class="live-hand-request-item">
+        <span>${this._escape(r.display_name)}</span>
+        <button type="button" class="btn btn-gold btn-sm approve-hand-btn" data-request-id="${r.id}" data-user-id="${r.user_id}">Approve</button>
+        <button type="button" class="btn btn-ghost btn-sm deny-hand-btn" data-request-id="${r.id}">Deny</button>
+      </div>
+    `).join('');
+    list.querySelectorAll('.approve-hand-btn').forEach(btn => {
+      btn.onclick = async () => {
+        await API.resolveSpeakerRequest(btn.dataset.requestId, true);
+        this._hostAction('grant_speak', btn.dataset.userId);
+        this._renderHandRequests();
+        Components.showToast('Speaker approved');
+      };
+    });
+    list.querySelectorAll('.deny-hand-btn').forEach(btn => {
+      btn.onclick = async () => {
+        await API.resolveSpeakerRequest(btn.dataset.requestId, false);
+        this._renderHandRequests();
+      };
+    });
+  },
+
+  async _startLiveSession() {
+    if (!this._isHost() || !this.roomMeta?.eventId) return;
+    if (SupabaseClient.isEnabled()) {
+      await API.startMushairaSession(this.roomMeta.eventId);
+    }
+    this._applySessionStatus('live');
+    if (this.channel) {
+      this.channel.send({ type: 'broadcast', event: 'host_action', payload: { action: 'start_live' } });
+    }
+    this._appendSystemMessage('Live session has started!');
+    Components.showToast('Mushaira is now live!');
+    Storage.addNotification({ type: 'event', text: `${this.roomMeta.title} is live now!`, link: location.hash });
+  },
+
+  _showDonationModal() {
+    const eventId = this.roomMeta?.eventId;
+    if (!eventId) return;
+    Components.showModal('Send a Gift', `
+      <div class="donation-picker">
+        <button type="button" class="donation-choice" data-amount="10" data-type="coin">🪙 10 Coins</button>
+        <button type="button" class="donation-choice" data-amount="50" data-type="coin">🪙 50 Coins</button>
+        <button type="button" class="donation-choice" data-amount="1" data-type="gift">🎁 Gift</button>
+        <button type="button" class="donation-choice" data-amount="5" data-type="star">⭐ 5 Stars</button>
+      </div>
+    `);
+    document.querySelectorAll('.donation-choice').forEach(btn => {
+      btn.onclick = async () => {
+        const user = Auth.getCurrentUser();
+        if (SupabaseClient.isEnabled()) {
+          await API.postSessionDonation(eventId, {
+            amount: parseInt(btn.dataset.amount, 10),
+            giftType: btn.dataset.type,
+            senderName: user?.name
+          });
+        }
+        Components.closeModal();
+        Components.showToast('Gift sent! 🎉');
+        this._appendSystemMessage(`${user?.name || 'Someone'} sent a ${btn.dataset.type}!`);
+        this._renderDonations();
+        Storage.addNotification({ type: 'gift', text: `You received a gift in ${this.roomMeta.title}` });
+      };
+    });
+  },
+
   /* ===== Host controls ===== */
 
   _hostAction(action, targetUserId) {
@@ -916,11 +1122,33 @@ const VoiceRoomLive = {
         break;
       case 'remove':
         if (isTarget) {
+          if (this.roomMeta?.eventId && SupabaseClient.isEnabled()) {
+            API.banSessionUser(this.roomMeta.eventId, user.id, 'Removed by host');
+          }
           await this._forceRemove();
           Components.showToast('Removed from room by host', 'error');
           setTimeout(() => Router.go(this.roomMeta.leavePath || '/mushaira'), 1500);
         } else if (isHost || fromSelf) {
           this._appendSystemMessage(`${payload.targetName || 'User'} was removed by host`);
+        }
+        break;
+      case 'pause':
+        if (!isHost) {
+          this._paused = true;
+          document.getElementById('live-paused-banner').hidden = false;
+          document.querySelector('.live-room-v2')?.classList.add('is-paused');
+          this._appendSystemMessage('Session paused by host');
+        }
+        break;
+      case 'resume':
+      case 'start_live':
+        if (!isHost) {
+          this._paused = false;
+          document.getElementById('live-paused-banner').hidden = true;
+          document.getElementById('live-waiting-room')?.setAttribute('hidden', '');
+          document.querySelector('.live-room-v2')?.classList.remove('is-paused');
+          if (payload.action === 'start_live') this._appendSystemMessage('Live session has started!');
+          else this._appendSystemMessage('Session resumed');
         }
         break;
     }
@@ -940,7 +1168,7 @@ const VoiceRoomLive = {
 
     Components.showModal(
       'End Mushaira Event?',
-      '<p class="live-end-event-copy">This will close the live room and delete the event for everyone. This cannot be undone.</p>',
+      '<p class="live-end-event-copy">This will end the live session and move it to Past Sessions. Viewers will be disconnected.</p>',
       '<button type="button" class="btn btn-ghost" id="end-event-cancel">Cancel</button><button type="button" class="live-end-event-btn" id="end-event-confirm">End Event</button>'
     );
     document.getElementById('end-event-cancel')?.addEventListener('click', () => Components.closeModal());
@@ -965,24 +1193,28 @@ const VoiceRoomLive = {
       } catch (_) {}
     }
 
-    let deleted = true;
+    let ended = true;
     if (SupabaseClient.isEnabled()) {
-      deleted = await API.deleteMushairaEvent(eventId);
+      const result = await API.endMushairaSession(eventId);
+      ended = !!result;
+      if (result) {
+        const list = (window.REMOTE_MUSHAIRA_EVENTS || []).map(e =>
+          e.id === parseInt(eventId, 10) ? result : e
+        );
+        window.REMOTE_MUSHAIRA_EVENTS = list;
+      }
     } else {
       Storage.removeCustomMushaira(eventId);
     }
 
-    if (!deleted) {
+    if (!ended) {
       Components.showToast('Could not end event. Please try again.', 'error');
       return;
     }
 
     if (typeof MushairaEvents !== 'undefined') {
-      MushairaEvents.removeFromList(eventId);
-    } else {
-      window.REMOTE_MUSHAIRA_EVENTS = (window.REMOTE_MUSHAIRA_EVENTS || []).filter(
-        e => e.id !== parseInt(eventId, 10)
-      );
+      MushairaEvents.renderLists?.();
+      MushairaEvents.updateLiveUI?.();
     }
 
     Components.showToast('Mushaira event ended', 'success');
@@ -1024,14 +1256,29 @@ const VoiceRoomLive = {
 
   sendChat(text) {
     const user = Auth.getCurrentUser();
-    const msg = {
-      id: Date.now() + Math.random(),
-      from: user.name,
-      text,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      type: this._isHost() ? 'host' : 'user'
+    const eventId = this.roomMeta?.eventId;
+    const post = async () => {
+      if (eventId && SupabaseClient.isEnabled()) {
+        const saved = await API.postSessionComment(eventId, text);
+        if (saved) {
+          this._appendChatMessage({ ...saved, type: this._isHost() ? 'host' : 'user' }, false);
+          if (this.channel) {
+            this.channel.send({ type: 'broadcast', event: 'room_chat', payload: { ...saved, type: this._isHost() ? 'host' : 'user' } });
+          }
+          return;
+        }
+      }
+      const msg = {
+        id: Date.now() + Math.random(),
+        from: user.name,
+        text,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        type: this._isHost() ? 'host' : 'user',
+        userId: user.id
+      };
+      this._appendChatMessage(msg, true);
     };
-    this._appendChatMessage(msg, true);
+    post();
   },
 
   _appendChatMessage(msg, broadcast) {
@@ -1066,13 +1313,38 @@ const VoiceRoomLive = {
   _renderChat() {
     const box = document.getElementById('live-room-messages');
     if (!box) return;
+    const user = Auth.getCurrentUser();
+    const isHost = this._isHost();
     box.innerHTML = this.chatMessages.map(m => `
-      <div class="live-chat-msg ${m.type === 'host' ? 'host' : ''} ${m.type === 'system' ? 'system' : ''}">
+      <div class="live-chat-msg ${m.type === 'host' ? 'host' : ''} ${m.type === 'system' ? 'system' : ''} ${m.pinned ? 'pinned' : ''}" data-msg-id="${m.dbId || m.id}">
         ${m.type !== 'system' ? `<strong>${this._escape(m.from)}</strong>` : ''}
+        ${m.pinned ? '<span class="live-chat-pin">📌</span>' : ''}
         ${m.type === 'system' ? `<em>${m.text}</em>` : `<p>${this._escape(m.text)}</p>`}
         ${m.time ? `<span>${m.time}</span>` : ''}
+        ${m.dbId && (m.userId === user?.id || isHost) ? `
+          <span class="live-chat-actions">
+            ${isHost ? `<button type="button" class="live-chat-action pin-msg-btn" data-id="${m.dbId}" data-pinned="${m.pinned ? '1' : '0'}">${m.pinned ? 'Unpin' : 'Pin'}</button>` : ''}
+            ${m.userId === user?.id ? `<button type="button" class="live-chat-action delete-msg-btn" data-id="${m.dbId}">Delete</button>` : ''}
+          </span>
+        ` : ''}
       </div>
     `).join('');
+    box.querySelectorAll('.pin-msg-btn').forEach(btn => {
+      btn.onclick = async () => {
+        const pinned = btn.dataset.pinned !== '1';
+        await API.pinSessionComment(btn.dataset.id, pinned);
+        const msg = this.chatMessages.find(x => String(x.dbId) === btn.dataset.id);
+        if (msg) msg.pinned = pinned;
+        this._renderChat();
+      };
+    });
+    box.querySelectorAll('.delete-msg-btn').forEach(btn => {
+      btn.onclick = async () => {
+        await API.deleteSessionComment(btn.dataset.id);
+        this.chatMessages = this.chatMessages.filter(x => String(x.dbId) !== btn.dataset.id);
+        this._renderChat();
+      };
+    });
     box.scrollTop = box.scrollHeight;
   },
 
@@ -1100,6 +1372,7 @@ function renderLiveRoomView(meta) {
       data-host-owner-id="${meta.hostOwnerId || ''}"
       data-room-type="${meta.roomType || ''}"
       data-event-id="${meta.eventId || ''}"
+      data-session-status="${meta.sessionStatus || 'live'}"
       data-max-seats="${maxSeats}"
       data-leave-path="${meta.leavePath || '/voice-rooms'}">
 
@@ -1121,8 +1394,19 @@ function renderLiveRoomView(meta) {
       <div id="live-host-panel" class="live-host-panel" hidden>
         <span class="live-host-badge">Host</span>
         <span class="live-host-hint">Tap participants to manage</span>
+        <button type="button" class="btn btn-gold btn-sm" id="live-start-btn" hidden>Start Live</button>
         <button type="button" class="btn btn-outline-gold btn-sm" id="live-pause-btn" hidden>Pause Live</button>
         <button type="button" class="live-end-event-btn" id="live-end-event-btn" hidden>End Event</button>
+      </div>
+
+      <div id="live-waiting-room" class="live-waiting-room" hidden>
+        <h2>Live starts soon</h2>
+        <p class="live-waiting-countdown" id="live-waiting-countdown">Get ready for the mushaira</p>
+      </div>
+
+      <div id="live-hand-requests" class="live-hand-requests" hidden>
+        <h3>Hand Raise Requests</h3>
+        <div id="live-hand-requests-list"></div>
       </div>
 
       <div id="live-paused-banner" class="live-paused-banner" hidden>
@@ -1158,6 +1442,12 @@ function renderLiveRoomView(meta) {
               <button type="submit" class="btn btn-gold btn-sm">Send</button>
             </form>
           </section>
+          ${meta.roomType === 'mushaira' ? `
+          <section class="live-v2-donations-card">
+            <h3>Top Gifts</h3>
+            <div id="live-donations-list"><p class="empty-hint">Loading…</p></div>
+          </section>
+          ` : ''}
         </aside>
       </div>
 
@@ -1182,6 +1472,12 @@ function renderLiveRoomView(meta) {
           <span class="live-dock-icon">↗</span>
           <span class="live-dock-label">Share</span>
         </button>
+        ${meta.roomType === 'mushaira' ? `
+        <button type="button" class="live-dock-btn" id="live-donate-btn">
+          <span class="live-dock-icon">🎁</span>
+          <span class="live-dock-label">Gift</span>
+        </button>
+        ` : ''}
         <button type="button" class="live-dock-btn" id="live-leave-seat-btn">
           <span class="live-dock-icon">↩</span>
           <span class="live-dock-label">Leave</span>

@@ -54,6 +54,7 @@ const App = {
     if (Auth.isLoggedIn() && !Auth.isGuest() && typeof Realtime !== 'undefined') {
       await Realtime.init();
     }
+    if (typeof API !== 'undefined') await API.processDueReminders();
   },
 
   bindGlobalEvents() {
@@ -790,6 +791,15 @@ const App = {
 
     if (document.getElementById('mushaira-events-root') && typeof MushairaEvents !== 'undefined') {
       MushairaEvents.initPage();
+    }
+
+    if (document.querySelector('.session-details-page') && typeof MushairaEvents !== 'undefined') {
+      MushairaEvents._bindEventButtons();
+    }
+
+    const sessionRoot = document.getElementById('mushaira-session-root');
+    if (sessionRoot && typeof MushairaEvents !== 'undefined') {
+      MushairaEvents.initSessionPage(sessionRoot.dataset.id);
     }
 
     if (document.getElementById('voice-rooms-grid') && typeof VoiceRoomsList !== 'undefined') {
