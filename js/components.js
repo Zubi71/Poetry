@@ -85,10 +85,12 @@ const Components = {
             ${unread > 0 ? `<span class="badge-count">${unread}</span>` : ''}
           </a>
           <div class="user-menu">
-            ${avatarImg(user.name, 'user-avatar')}
+            <a href="${Auth.isGuest() ? '#/login' : '#/dashboard'}" class="user-avatar-link" aria-label="My profile">
+              ${avatarImg(user.name, 'user-avatar')}
+            </a>
             <div class="user-info">
               <span class="user-name">${user.name}</span>
-              <a href="#/settings" class="view-profile">View Profile</a>
+              <a href="#/dashboard" class="view-profile">View Profile</a>
             </div>
           </div>
         </div>

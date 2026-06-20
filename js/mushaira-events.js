@@ -226,6 +226,220 @@ const MushairaEvents = {
     }
   },
 
+  _getActiveTab() {
+    const hash = location.hash.slice(1) || '/';
+    const qs = hash.split('?')[1] || '';
+    return new URLSearchParams(qs).get('tab') || 'live';
+  },
+
+  _eventImage(event) {
+    return event.image || getPlaceholderImage(640, 360, event.title);
+  },
+
+  _formatCount(n) {
+    if (!n) return '0';
+    if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
+    return String(n);
+  },
+
+  _getSpeakers(event) {
+    const host = event.host || 'Host';
+    const poets = APP_DATA.poets.filter(p => p.name !== host).slice(0, 3);
+    return [
+      { name: host, role: 'Host', muted: false },
+      ...poets.map((p, i) => ({ name: p.name, role: 'Speaker', muted: i === 1 }))
+    ];
+  },
+
+  _getAudienceAvatars(count = 12) {
+    return APP_DATA.poets.slice(0, count).map(p => p.name);
+  },
+
+  _groupScheduleEvents(events) {
+    const today = new Date().toDateString();
+    const tomorrow = new Date(Date.now() + 86400000).toDateString();
+    const groups = { today: [], tomorrow: [], later: [] };
+
+    events.forEach(event => {
+      const d = event.date ? new Date(event.date).toDateString() : '';
+      if (d === today) groups.today.push(event);
+      else if (d === tomorrow) groups.tomorrow.push(event);
+      else groups.later.push(event);
+    });
+
+    return groups;
+  },
+
+  _renderTags(tags = []) {
+    const list = tags.length ? tags : ['Poetry', 'Shayari', 'Urdu'];
+    return list.map(t => `<span class="mushaira-v2-tag">${this._esc(t)}</span>`).join('');
+  },
+
+  renderFeaturedLive(event) {
+    const watching = event.watching || event.registered || 0;
+    return `
+      <article class="mushaira-v2-featured">
+        <div class="mushaira-v2-featured-media">
+          <img src="${this._eventImage(event)}" alt="${this._esc(event.title)}">
+          <span class="mushaira-v2-live-pill">LIVE</span>
+          <span class="mushaira-v2-watching"><span class="mushaira-v2-dot"></span> ${this._formatCount(watching)} watching</span>
+        </div>
+        <div class="mushaira-v2-featured-body">
+          <h2>${this._esc(event.title)}</h2>
+          <div class="mushaira-v2-tags">${this._renderTags(event.tags)}</div>
+          <button type="button" class="btn btn-gold mushaira-v2-join join-event-btn" data-event-id="${event.id}" data-live="1">
+            ${Components.icon('voice')} Join Live
+          </button>
+        </div>
+      </article>
+    `;
+  },
+
+  renderSpeakersSection(event) {
+    const speakers = this._getSpeakers(event);
+    return `
+      <section class="mushaira-v2-section">
+        <div class="mushaira-v2-section-head">
+          <h3>Speakers · ${speakers.length}</h3>
+          <button type="button" class="mushaira-v2-link-btn">View all</button>
+        </div>
+        <div class="mushaira-v2-speakers">
+          ${speakers.map(s => `
+            <div class="mushaira-v2-speaker">
+              ${avatarImg(s.name, 'mushaira-v2-speaker-avatar', s.name)}
+              <span class="mushaira-v2-speaker-name">${this._esc(s.name.split(' ')[0])}</span>
+              <span class="mushaira-v2-speaker-role">${this._esc(s.role)}</span>
+              <span class="mushaira-v2-mic ${s.muted ? 'muted' : ''}">${Components.icon('voice')}</span>
+            </div>
+          `).join('')}
+          <div class="mushaira-v2-speaker mushaira-v2-speaker-more">+2</div>
+        </div>
+      </section>
+    `;
+  },
+
+  renderAudienceSection(event) {
+    const audience = this._getAudienceAvatars(10);
+    const total = event.watching || event.registered || 2400;
+    return `
+      <section class="mushaira-v2-section">
+        <div class="mushaira-v2-section-head">
+          <h3>Audience · ${this._formatCount(total)}</h3>
+          <button type="button" class="mushaira-v2-link-btn">View all</button>
+        </div>
+        <div class="mushaira-v2-audience">
+          ${audience.map(name => avatarImg(name, 'mushaira-v2-audience-avatar', name)).join('')}
+        </div>
+      </section>
+    `;
+  },
+
+  renderWatchBar(event) {
+    const likes = event.registered || 1200;
+    return `
+      <div class="mushaira-v2-watch-bar">
+        <span class="mushaira-v2-watch-spark">✨</span>
+        <p>You're watching Live! Enjoy the mushaira and show your love</p>
+        <span class="mushaira-v2-watch-hearts">❤️ ${this._formatCount(likes)}</span>
+      </div>
+    `;
+  },
+
+  renderScheduleCard(event, registered) {
+    const isRegistered = registered.includes(event.id);
+    return `
+      <article class="mushaira-v2-schedule-card">
+        <img class="mushaira-v2-schedule-thumb" src="${this._eventImage(event)}" alt="">
+        <div class="mushaira-v2-schedule-info">
+          <span class="mushaira-v2-schedule-time">${this._esc(event.time)}</span>
+          <strong>${this._esc(event.host)}</strong>
+          <h4>${this._esc(event.title)}</h4>
+          <p>${this._esc(event.description || event.location || '')}</p>
+        </div>
+        <button type="button" class="mushaira-v2-reminder register-event-btn ${isRegistered ? 'active' : ''}" data-event-id="${event.id}">
+          ${Components.icon('bell')} ${isRegistered ? 'Reminder Set' : 'Set Reminder'}
+        </button>
+      </article>
+    `;
+  },
+
+  renderEndedCard(event) {
+    const views = event.views || event.registered || 0;
+    return `
+      <article class="mushaira-v2-ended-card">
+        <img class="mushaira-v2-ended-thumb" src="${this._eventImage(event)}" alt="">
+        <div class="mushaira-v2-ended-info">
+          <h4>${this._esc(event.title)}</h4>
+          <div class="mushaira-v2-tags">${this._renderTags(event.tags)}</div>
+          <p>${this._esc(event.date)} · ${this._esc(event.time)}</p>
+        </div>
+        <div class="mushaira-v2-ended-actions">
+          <button type="button" class="mushaira-v2-play" aria-label="Play recording">▶</button>
+          <span>${this._formatCount(views)} views</span>
+        </div>
+      </article>
+    `;
+  },
+
+  renderLiveTab(liveEvents, registered) {
+    if (!liveEvents.length) {
+      return '<p class="empty-state">No live mushaira right now. Check Schedule for upcoming events.</p>';
+    }
+    const primary = liveEvents[0];
+    return `
+      ${this.renderFeaturedLive(primary)}
+      ${this.renderSpeakersSection(primary)}
+      ${this.renderAudienceSection(primary)}
+      ${this.renderWatchBar(primary)}
+      ${liveEvents.length > 1 ? `
+        <section class="mushaira-v2-section">
+          <div class="mushaira-v2-section-head"><h3>More Live</h3></div>
+          <div class="mushaira-v2-more-live">
+            ${liveEvents.slice(1).map(e => this.renderFeaturedLive(e)).join('')}
+          </div>
+        </section>
+      ` : ''}
+    `;
+  },
+
+  renderScheduleTab(scheduled, registered) {
+    if (!scheduled.length) {
+      return '<p class="empty-state">No upcoming events scheduled yet.</p>';
+    }
+    const groups = this._groupScheduleEvents(scheduled);
+    const renderGroup = (label, items) => items.length ? `
+      <section class="mushaira-v2-schedule-group">
+        <h3>${label}</h3>
+        ${items.map(e => this.renderScheduleCard(e, registered)).join('')}
+      </section>
+    ` : '';
+
+    const todayLabel = `Today's Schedule (${new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })})`;
+    const tomorrow = new Date(Date.now() + 86400000);
+    const tomorrowLabel = `Tomorrow's Schedule (${tomorrow.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })})`;
+
+    return `
+      ${renderGroup(todayLabel, groups.today)}
+      ${renderGroup(tomorrowLabel, groups.tomorrow)}
+      ${renderGroup('Upcoming', groups.later)}
+    `;
+  },
+
+  renderEndedTab(endedEvents) {
+    if (!endedEvents.length) {
+      return '<p class="empty-state">No past sessions yet.</p>';
+    }
+    return `
+      <div class="mushaira-v2-ended-head">
+        <h3>Past Sessions</h3>
+        <button type="button" class="mushaira-v2-filter-btn">Filter</button>
+      </div>
+      <div class="mushaira-v2-ended-list">
+        ${endedEvents.map(e => this.renderEndedCard(e)).join('')}
+      </div>
+    `;
+  },
+
   renderEventCard(event, registered) {
     if (event.live) {
       return `
@@ -261,35 +475,25 @@ const MushairaEvents = {
 
     const registered = Storage.getRegisteredEvents();
     const allEvents = getAllMushairaEvents();
+    const tab = root.dataset.tab || this._getActiveTab();
     const liveEvents = allEvents.filter(e => e.live);
-    const upcoming = allEvents.filter(e => !e.live);
+    const endedEvents = allEvents.filter(e => !e.live && e.ended);
+    const scheduledEvents = allEvents.filter(e => !e.live && !e.ended);
 
-    if (!allEvents.length) {
-      root.innerHTML = `
-        <section class="events-section">
-          <p class="empty-state">No mushaira events yet. Be the first to create one!</p>
-        </section>
-      `;
-      return;
+    let html = '';
+    if (tab === 'schedule') {
+      html = this.renderScheduleTab(scheduledEvents, registered);
+    } else if (tab === 'ended') {
+      html = this.renderEndedTab(endedEvents);
+    } else {
+      html = this.renderLiveTab(liveEvents, registered);
     }
 
-    root.innerHTML = `
-      ${liveEvents.length ? `
-        <section class="events-section">
-          <h2><span class="live-badge">Live</span> Live Now</h2>
-          <div class="events-list">${liveEvents.map(e => this.renderEventCard(e, registered)).join('')}</div>
-        </section>
-      ` : ''}
-      <section class="events-section">
-        <h2>${liveEvents.length ? 'Other Events' : 'All Events'}</h2>
-        <div class="events-list">
-          ${(liveEvents.length ? upcoming : allEvents).length
-            ? (liveEvents.length ? upcoming : allEvents).map(e => this.renderEventCard(e, registered)).join('')
-            : '<p class="empty-state">No upcoming events scheduled.</p>'}
-        </div>
-      </section>
-    `;
+    if (!allEvents.length) {
+      html = '<p class="empty-state">No mushaira events yet. Tap + to create one!</p>';
+    }
 
+    root.innerHTML = html;
     this._bindEventButtons();
   },
 
@@ -303,9 +507,13 @@ const MushairaEvents = {
     document.querySelectorAll('.register-event-btn').forEach(btn => {
       btn.onclick = () => {
         Storage.registerEvent(parseInt(btn.dataset.eventId));
-        Components.showToast('Successfully registered!');
+        Components.showToast('Reminder set!');
         this.renderLists();
       };
+    });
+
+    document.querySelectorAll('.mushaira-v2-filter-btn').forEach(btn => {
+      btn.onclick = () => Components.showToast('Filter coming soon');
     });
   },
 
