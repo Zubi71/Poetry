@@ -26,7 +26,8 @@ const Components = {
       menu: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>',
       crown: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M2 19h20v2H2v-2zm2-8l3.5 4.5L12 8l4.5 7.5L20 11l2 8H2l2-8z"/></svg>',
       explore: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>',
-      profile: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>'
+      profile: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
+      edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>'
     };
     return icons[name] || '';
   },
@@ -256,6 +257,143 @@ const Components = {
           </div>
         ` : ''}
       </article>
+    `;
+  },
+
+  renderProfilePoemCard(poem) {
+    const lines = (poem.text || '').split('\n').filter(Boolean).slice(0, 2);
+    const snippet = lines.join('\n');
+    const liked = Storage.isLiked(poem.id);
+    return `
+      <article class="profile-poem-card" data-poem-id="${poem.id}">
+        <a href="#/poem/${poem.id}" class="profile-poem-link">
+          <div class="profile-poem-text urdu-text">${formatPoemHtml(snippet, poem.cardTheme || 'classic-dark')}</div>
+        </a>
+        <div class="profile-poem-footer">
+          <div class="profile-poem-stats">
+            <span class="profile-stat-item ${liked ? 'liked' : ''}">${this.icon('heart')} ${poem.likes || 0}</span>
+            <span class="profile-stat-item">${this.icon('comment')} ${poem.comments || 0}</span>
+            <span class="profile-stat-item">${this.icon('share')} ${poem.shares || 0}</span>
+          </div>
+          <span class="profile-poem-time">${poem.time || 'Recently'}</span>
+        </div>
+      </article>
+    `;
+  },
+
+  renderProfileDraftCard(draft) {
+    const lines = (draft.text || '').split('\n').filter(Boolean).slice(0, 2);
+    const snippet = lines.join('\n') || 'Empty draft';
+    return `
+      <article class="profile-poem-card profile-draft-card">
+        <div class="profile-poem-text urdu-text">${formatPoemHtml(snippet, draft.cardTheme || 'classic-dark')}</div>
+        <div class="profile-poem-footer">
+          <span class="profile-draft-label">Draft</span>
+          <div class="profile-draft-actions">
+            <button type="button" class="btn btn-gold btn-sm edit-draft-btn" data-draft-id="${draft.id}">Continue</button>
+            <button type="button" class="btn btn-ghost btn-sm delete-draft-btn" data-draft-id="${draft.id}">Delete</button>
+          </div>
+        </div>
+      </article>
+    `;
+  },
+
+  renderUserProfile(options) {
+    const {
+      user,
+      username,
+      bio,
+      isOwn = false,
+      profilePath = '#/dashboard',
+      settingsPath = '#/settings',
+      sharePath,
+      followers = 0,
+      following = 0,
+      poemCount = 0,
+      activity = { hearts: 0, comments: 0, shares: 0 },
+      tabs = [],
+      tabContent = '',
+      actionsHtml = ''
+    } = options;
+
+    const handle = username ? `@${username}` : '';
+    const bioText = bio || (isOwn ? 'شاعر • اردو • پاکستان' : '');
+
+    const defaultActions = isOwn ? `
+      <a href="${settingsPath}" class="profile-v2-btn">
+        ${this.icon('edit')} Edit Profile
+      </a>
+      <button type="button" class="profile-v2-btn" id="share-profile-btn" data-share-url="${sharePath || profilePath}">
+        ${this.icon('share')} Share Profile
+      </button>
+    ` : actionsHtml;
+
+    return `
+      <div class="profile-v2">
+        <div class="profile-v2-top">
+          <div class="profile-v2-avatar-wrap">
+            ${avatarImg(user.name, 'profile-v2-avatar', user.name)}
+            <span class="profile-v2-online" aria-label="Online"></span>
+          </div>
+          <div class="profile-v2-info">
+            <h1>${user.name}${user.verified ? ' <span class="verified-badge">✓</span>' : ''}</h1>
+            ${handle ? `<p class="profile-v2-handle">${handle}</p>` : ''}
+            ${bioText ? `<p class="profile-v2-bio urdu-text">${bioText}</p>` : ''}
+          </div>
+          ${isOwn ? `<a href="${settingsPath}" class="profile-v2-settings" aria-label="Settings">${this.icon('settings')}</a>` : ''}
+        </div>
+
+        <div class="profile-v2-stats">
+          <div class="profile-v2-stat-card">
+            <span class="profile-v2-stat-icon">${this.icon('poets')}</span>
+            <strong>${this.formatNumber(followers)}</strong>
+            <span>Followers</span>
+          </div>
+          <div class="profile-v2-stat-card">
+            <span class="profile-v2-stat-icon">${this.icon('profile')}</span>
+            <strong>${this.formatNumber(following)}</strong>
+            <span>Following</span>
+          </div>
+          <div class="profile-v2-stat-card">
+            <span class="profile-v2-stat-icon">${this.icon('poems')}</span>
+            <strong>${poemCount}</strong>
+            <span>Poems</span>
+          </div>
+        </div>
+
+        <div class="profile-v2-actions">
+          ${actionsHtml || defaultActions}
+        </div>
+
+        <section class="profile-v2-activity">
+          <h2>${isOwn ? 'My Activity' : 'Activity'}</h2>
+          <div class="profile-v2-activity-grid">
+            <div class="profile-v2-activity-card">
+              <span class="activity-icon hearts">❤️</span>
+              <strong>${this.formatNumber(activity.hearts)}</strong>
+              <span>Hearts</span>
+            </div>
+            <div class="profile-v2-activity-card">
+              <span class="activity-icon comments">💬</span>
+              <strong>${this.formatNumber(activity.comments)}</strong>
+              <span>Comments</span>
+            </div>
+            <div class="profile-v2-activity-card">
+              <span class="activity-icon shares">↗️</span>
+              <strong>${this.formatNumber(activity.shares)}</strong>
+              <span>Shares</span>
+            </div>
+          </div>
+        </section>
+
+        <div class="profile-v2-tabs profile-tabs">
+          ${tabs.map(t => `
+            <a href="${t.href}" class="profile-tab ${t.active ? 'active' : ''}">${t.label}</a>
+          `).join('')}
+        </div>
+
+        <div class="profile-v2-feed">${tabContent}</div>
+      </div>
     `;
   },
 

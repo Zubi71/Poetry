@@ -140,7 +140,7 @@ const Pages = {
     return Components.renderAppLayout(content);
   },
 
-  poetProfile(params) {
+  poetProfile(params, query) {
     const poet = getPoetById(params.id);
     if (!poet) return Components.renderAppLayout('<p class="empty-state">Poet not found.</p>');
 
@@ -148,46 +148,60 @@ const Pages = {
       Components.showGuestLimitModal();
     }
 
-    const tab = new URLSearchParams(location.hash.split('?')[1] || '').get('tab') || 'posts';
+    const tab = query.tab || 'poems';
     const poems = getPoemsByPoet(poet.id);
     const following = Storage.isFollowing(poet.id);
     const bookmarkedPoems = Storage.getBookmarks().map(id => getPoemById(id)).filter(Boolean);
     const likedPoems = Storage.getLikes().map(id => getPoemById(id)).filter(p => p && p.poetId === poet.id);
 
     let tabContent;
-    if (tab === 'bookmarks') tabContent = bookmarkedPoems.map(p => Components.renderPoemCard(p)).join('') || '<p class="empty-state">No bookmarks yet.</p>';
-    else if (tab === 'likes') tabContent = likedPoems.map(p => Components.renderPoemCard(p)).join('') || '<p class="empty-state">No likes yet.</p>';
-    else tabContent = poems.map(p => Components.renderPoemCard(p)).join('') || '<p class="empty-state">No posts yet.</p>';
+    if (tab === 'starred') {
+      tabContent = bookmarkedPoems.length
+        ? bookmarkedPoems.map(p => Components.renderProfilePoemCard(p)).join('')
+        : '<p class="empty-state">No starred poems yet.</p>';
+    } else if (tab === 'likes') {
+      tabContent = likedPoems.length
+        ? likedPoems.map(p => Components.renderProfilePoemCard(p)).join('')
+        : '<p class="empty-state">No likes yet.</p>';
+    } else {
+      tabContent = poems.length
+        ? poems.map(p => Components.renderProfilePoemCard(p)).join('')
+        : '<p class="empty-state">No poems yet.</p>';
+    }
 
-    const content = `
-      <div class="poet-profile">
-        <div class="profile-header">
-          ${avatarImg(poet.name, 'profile-avatar', poet.name)}
-          <div class="profile-info">
-            <h1>${poet.name} ${poet.verified ? '<span class="verified-badge">✓</span>' : ''}</h1>
-            <p>${poet.bio}</p>
-            <div class="profile-stats">
-              <span><strong>${poet.posts}</strong> Posts</span>
-              <span><strong>${Components.formatNumber(poet.followers)}</strong> Followers</span>
-              <span><strong>${poet.following}</strong> Following</span>
-            </div>
-            <div class="profile-actions">
-              <button class="btn ${following ? 'btn-outline-gold' : 'btn-gold'} follow-btn" data-poet-id="${poet.id}">${following ? 'Following' : 'Follow'}</button>
-              <a href="#/messages/${poet.id}" class="btn btn-outline-gold">Message</a>
-              <button class="btn btn-ghost report-btn" data-type="user" data-id="${poet.id}">Report</button>
-              <button class="btn btn-ghost block-btn" data-id="${poet.id}">Block</button>
-            </div>
-          </div>
-        </div>
-        <div class="profile-tabs">
-          <a href="#/poet/${poet.id}?tab=posts" class="profile-tab ${tab === 'posts' ? 'active' : ''}">Posts</a>
-          <a href="#/poet/${poet.id}?tab=likes" class="profile-tab ${tab === 'likes' ? 'active' : ''}">Likes</a>
-          <a href="#/poet/${poet.id}?tab=bookmarks" class="profile-tab ${tab === 'bookmarks' ? 'active' : ''}">Bookmarks</a>
-        </div>
-        <div class="poem-feed">${tabContent}</div>
-      </div>
+    const totalHearts = poems.reduce((sum, p) => sum + (p.likes || 0), 0);
+    const totalComments = poems.reduce((sum, p) => sum + (p.comments || 0), 0);
+    const totalShares = poems.reduce((sum, p) => sum + (p.shares || 0), 0);
+    const username = poet.name.toLowerCase().replace(/\s+/g, '');
+
+    const actionsHtml = `
+      <button class="profile-v2-btn profile-v2-btn-primary btn ${following ? 'btn-outline-gold' : 'btn-gold'} follow-btn" data-poet-id="${poet.id}">
+        ${following ? 'Following' : 'Follow'}
+      </button>
+      <a href="#/messages" class="profile-v2-btn btn btn-outline-gold">Message</a>
     `;
-    return Components.renderAppLayout(content);
+
+    const content = Components.renderUserProfile({
+      user: { name: poet.name, verified: poet.verified },
+      username,
+      bio: poet.bio,
+      isOwn: false,
+      profilePath: `#/poet/${poet.id}`,
+      sharePath: `${location.origin}${location.pathname}#/poet/${poet.id}`,
+      followers: poet.followers || 0,
+      following: poet.following || 0,
+      poemCount: poet.posts || poems.length,
+      activity: { hearts: totalHearts, comments: totalComments, shares: totalShares },
+      tabs: [
+        { label: 'Poems', href: `#/poet/${poet.id}?tab=poems`, active: tab === 'poems' },
+        { label: 'Likes', href: `#/poet/${poet.id}?tab=likes`, active: tab === 'likes' },
+        { label: 'Starred', href: `#/poet/${poet.id}?tab=starred`, active: tab === 'starred' }
+      ],
+      tabContent,
+      actionsHtml
+    });
+
+    return Components.renderAppLayout(content, { noSidebar: true });
   },
 
   poemDetail(params) {
@@ -843,106 +857,65 @@ const Pages = {
     return Components.renderAppLayout(content, { authPage: true });
   },
 
-  dashboard() {
+  dashboard(params, query) {
     const user = Auth.getCurrentUser();
+    const tab = query.tab || 'poems';
     const stats = Storage.getAnalytics();
     const drafts = Storage.getDrafts();
-    const scheduled = Storage.getScheduledPosts();
     const myPosts = Storage.getUserPosts().filter(p => p.poetName === user.name);
-    const cardTheme = Storage.getCardTheme();
-    const themes = [
-      { id: 'classic-dark', label: 'Classic Dark', icon: '🌙' },
-      { id: 'golden-border', label: 'Golden Border', icon: '✨' },
-      { id: 'premium-paper', label: 'Gold Paper', icon: '📜' }
-    ];
+    const likedPoems = Storage.getLikes().map(id => getPoemById(id)).filter(Boolean);
+    const starredPoems = Storage.getBookmarks().map(id => getPoemById(id)).filter(Boolean);
+    const poetMatch = APP_DATA.poets.find(p => p.name === user.name);
+    const username = user.username || user.name?.toLowerCase().replace(/\s+/g, '') || 'poet';
+    const followers = poetMatch?.followers || 0;
+    const following = Storage.getFollowing().length;
+    const poemCount = myPosts.length;
+    const hearts = stats.likes + Storage.getLikes().length + myPosts.reduce((s, p) => s + (p.likes || 0), 0);
 
-    const content = `
-      <div class="dashboard-page">
-        <div class="page-header dashboard-header">
-          <div class="dashboard-profile">
-            ${avatarImg(user.name, 'dashboard-avatar', user.name)}
-            <div>
-              <h1>${user.name}</h1>
-              <p>${user.isGuest ? 'Guest User' : 'Member'}</p>
-            </div>
-          </div>
-          <button type="button" class="btn btn-gold" id="dashboard-write-btn">+ Write Poetry</button>
-        </div>
+    let tabContent;
+    if (tab === 'likes') {
+      tabContent = likedPoems.length
+        ? likedPoems.map(p => Components.renderProfilePoemCard(p)).join('')
+        : '<p class="empty-state">No liked poems yet.</p>';
+    } else if (tab === 'drafts') {
+      tabContent = drafts.length
+        ? drafts.map(d => Components.renderProfileDraftCard(d)).join('')
+        : '<p class="empty-state">No drafts yet. Start writing!</p>';
+    } else if (tab === 'starred') {
+      tabContent = starredPoems.length
+        ? starredPoems.map(p => Components.renderProfilePoemCard(p)).join('')
+        : '<p class="empty-state">No starred poems yet.</p>';
+    } else {
+      tabContent = myPosts.length
+        ? myPosts.map(p => Components.renderProfilePoemCard(p)).join('')
+        : '<p class="empty-state">You haven\'t posted yet. <button type="button" class="btn btn-gold btn-sm" id="dashboard-write-btn">Write Poetry</button></p>';
+    }
 
-        <div class="analytics-grid">
-          <div class="stat-card"><span class="stat-icon">❤️</span><strong>${Components.formatNumber(stats.likes + Storage.getLikes().length)}</strong><span>Hearts</span></div>
-          <div class="stat-card"><span class="stat-icon">💬</span><strong>${stats.comments}</strong><span>Comments</span></div>
-          <div class="stat-card"><span class="stat-icon">↗️</span><strong>${stats.shares}</strong><span>Shares</span></div>
-          <div class="stat-card"><span class="stat-icon">🔖</span><strong>${Storage.getBookmarks().length}</strong><span>Saves</span></div>
-        </div>
+    const content = Components.renderUserProfile({
+      user,
+      username,
+      bio: user.bio,
+      isOwn: true,
+      profilePath: '#/dashboard',
+      sharePath: `${location.origin}${location.pathname}#/dashboard`,
+      followers,
+      following,
+      poemCount,
+      activity: {
+        hearts,
+        comments: stats.comments,
+        shares: stats.shares
+      },
+      tabs: [
+        { label: 'Poems', href: '#/dashboard?tab=poems', active: tab === 'poems' },
+        { label: 'Likes', href: '#/dashboard?tab=likes', active: tab === 'likes' },
+        { label: 'Drafts', href: '#/dashboard?tab=drafts', active: tab === 'drafts' },
+        { label: 'Starred', href: '#/dashboard?tab=starred', active: tab === 'starred' }
+      ],
+      tabContent
+    });
 
-        <section class="dashboard-section" id="dashboard-notifications-section">
-          <div class="section-row">
-            <h2>Recent Notifications</h2>
-            <a href="#/notifications" class="btn btn-outline-gold btn-sm">View All</a>
-          </div>
-          <div class="notifications-list dashboard-notifications" id="dashboard-notifications">
-            <p class="loading-inline">Loading notifications...</p>
-          </div>
-        </section>
-
-        <section class="dashboard-section">
-          <h2>Poetry Card Customizer</h2>
-          <p class="section-desc">Choose your default card style for new posts and downloads</p>
-          <div class="card-theme-options dashboard-themes">
-            ${themes.map(t => `
-              <button type="button" class="theme-chip dashboard-theme-btn ${cardTheme === t.id ? 'active' : ''}" data-theme="${t.id}">
-                <span>${t.icon}</span> ${t.label}
-              </button>
-            `).join('')}
-          </div>
-          <div class="theme-preview-box poem-card-${cardTheme}">
-            ${formatPoemHtml('ہر مصرعہ ایک لائن میں\nخوبصورت انداز میں', cardTheme)}
-          </div>
-        </section>
-
-        <section class="dashboard-section">
-          <div class="section-row">
-            <h2>My Drafts</h2>
-            <button type="button" class="btn btn-outline-gold btn-sm" id="new-draft-btn">+ New Draft</button>
-          </div>
-          ${drafts.length ? drafts.map(d => `
-            <div class="draft-card">
-              <div class="draft-preview urdu-text">${d.text.split('\n')[0]}...</div>
-              <div class="draft-actions">
-                <button type="button" class="btn btn-gold btn-sm edit-draft-btn" data-draft-id="${d.id}">Continue Writing</button>
-                <button type="button" class="btn btn-ghost btn-sm delete-draft-btn" data-draft-id="${d.id}">Delete</button>
-              </div>
-            </div>
-          `).join('') : '<p class="empty-state">No drafts yet. Start writing!</p>'}
-        </section>
-
-        <section class="dashboard-section">
-          <h2>Scheduled Posts</h2>
-          ${scheduled.length ? scheduled.map(s => `
-            <div class="scheduled-card">
-              <div class="urdu-text">${s.text.split('\n')[0]}...</div>
-              <p>Scheduled: ${new Date(s.scheduleAt).toLocaleString()}</p>
-              <button type="button" class="btn btn-ghost btn-sm cancel-scheduled-btn" data-id="${s.id}">Cancel</button>
-            </div>
-          `).join('') : '<p class="empty-state">No scheduled posts.</p>'}
-        </section>
-
-        <section class="dashboard-section">
-          <h2>My Posts (${myPosts.length})</h2>
-          <div class="poem-feed">
-            ${myPosts.length ? myPosts.map(p => Components.renderPoemCard(p)).join('') : '<p class="empty-state">You haven\'t posted yet.</p>'}
-          </div>
-        </section>
-
-        <div class="dashboard-links">
-          <a href="#/bookmarks">Bookmarks</a>
-          <a href="#/history">History</a>
-          <a href="#/settings">Settings</a>
-        </div>
-      </div>
-    `;
-    return Components.renderAppLayout(content);
+    return Components.renderAppLayout(content, { noSidebar: true });
   },
 
   adminLogin(params, query) {

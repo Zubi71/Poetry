@@ -641,6 +641,23 @@ const App = {
     const dashboardWriteBtn = document.getElementById('dashboard-write-btn');
     if (dashboardWriteBtn) dashboardWriteBtn.onclick = () => Write.openModal();
 
+    const shareProfileBtn = document.getElementById('share-profile-btn');
+    if (shareProfileBtn) {
+      shareProfileBtn.onclick = async () => {
+        const url = shareProfileBtn.dataset.shareUrl || location.href;
+        try {
+          if (navigator.share) {
+            await navigator.share({ title: 'Urdu Poetry Profile', url });
+          } else {
+            await navigator.clipboard.writeText(url);
+            Components.showToast('Profile link copied!');
+          }
+        } catch (_) {
+          Components.showToast('Could not share profile', 'error');
+        }
+      };
+    }
+
     const newDraftBtn = document.getElementById('new-draft-btn');
     if (newDraftBtn) newDraftBtn.onclick = () => Write.openModal();
 
