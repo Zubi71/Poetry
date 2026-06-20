@@ -353,7 +353,7 @@ const Pages = {
           <a href="#/mushaira?tab=ended" class="mushaira-v2-tab ${tab === 'ended' ? 'active' : ''}">Ended</a>
         </nav>
 
-        <div id="mushaira-events-root" data-tab="${tab}">
+        <div id="mushaira-events-root" data-tab="${tab}" data-schedule-filter="${query.filter || 'all'}" data-ended-filter="${query.efilter || 'all'}">
           <p class="loading-inline">Loading events...</p>
         </div>
 

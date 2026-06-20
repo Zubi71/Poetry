@@ -643,6 +643,7 @@ const API = {
 
   mapMushairaEvent(row) {
     if (!row) return null;
+    const ended = row.status === 'ended' || !!row.ended_at;
     return {
       id: row.id,
       title: row.title,
@@ -650,8 +651,19 @@ const API = {
       date: row.event_date || API.timeAgo(row.created_at),
       time: row.event_time || 'Now',
       location: row.location || 'Online',
-      live: row.is_live !== false,
+      description: row.description || '',
+      tags: row.category ? [row.category.charAt(0).toUpperCase() + row.category.slice(1), 'Urdu'] : ['Poetry', 'Shayari', 'Urdu'],
+      live: row.is_live === true && !ended,
+      ended,
       registered: row.registered_count || 0,
+      watching: row.viewer_count || row.registered_count || 0,
+      viewer_count: row.viewer_count || 0,
+      likes: row.like_count || 0,
+      like_count: row.like_count || 0,
+      duration_minutes: row.duration_minutes || 0,
+      views: row.viewer_count || row.registered_count || 0,
+      replay_url: row.replay_url || null,
+      image: row.thumbnail_url || null,
       ownerId: row.user_id,
       userPost: true,
       created_at: row.created_at

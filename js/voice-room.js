@@ -326,11 +326,27 @@ const VoiceRoomLive = {
   _updateHostPanelVisibility() {
     const panel = document.getElementById('live-host-panel');
     const endBtn = document.getElementById('live-end-event-btn');
+    const pauseBtn = document.getElementById('live-pause-btn');
     const isHost = this._isHost();
     const isMushaira = this.roomMeta?.roomType === 'mushaira' && this.roomMeta?.eventId;
 
     if (panel) panel.hidden = !isHost;
     if (endBtn) endBtn.hidden = !(isHost && isMushaira);
+    if (pauseBtn) {
+      pauseBtn.hidden = !(isHost && isMushaira);
+      pauseBtn.textContent = this._paused ? 'Resume Live' : 'Pause Live';
+    }
+  },
+
+  _togglePauseLive() {
+    if (!this._isHost()) return;
+    this._paused = !this._paused;
+    const banner = document.getElementById('live-paused-banner');
+    if (banner) banner.hidden = !this._paused;
+    document.querySelector('.live-room-v2')?.classList.toggle('is-paused', this._paused);
+    this._appendSystemMessage(this._paused ? 'Session paused by host' : 'Session resumed');
+    this._updateHostPanelVisibility();
+    Components.showToast(this._paused ? 'Live session paused' : 'Live session resumed');
   },
 
   _updateSeatStats() {
@@ -515,6 +531,42 @@ const VoiceRoomLive = {
       Router.go(this.roomMeta.leavePath || '/voice-rooms');
     });
     document.getElementById('live-end-event-btn')?.addEventListener('click', () => this._confirmEndMushairaEvent());
+    document.getElementById('live-pause-btn')?.addEventListener('click', () => this._togglePauseLive());
+
+    document.getElementById('live-raise-hand-btn')?.addEventListener('click', () => {
+      this._appendSystemMessage(`${Auth.getCurrentUser()?.name || 'Someone'} raised their hand to speak`);
+      this.sendChat('✋ Request to speak');
+      Components.showToast('Hand raised — host will review your request');
+    });
+
+    document.getElementById('live-react-btn')?.addEventListener('click', () => {
+      Components.showModal('Send Reaction', `
+        <div class="live-react-picker">
+          <button type="button" class="live-react-choice" data-emoji="❤️">❤️</button>
+          <button type="button" class="live-react-choice" data-emoji="👏">👏</button>
+          <button type="button" class="live-react-choice" data-emoji="🔥">🔥</button>
+        </div>
+      `);
+      document.querySelectorAll('.live-react-choice').forEach(btn => {
+        btn.onclick = () => {
+          const emoji = btn.dataset.emoji;
+          this.sendChat(emoji);
+          Components.closeModal();
+          Components.showToast(`Sent ${emoji}`);
+        };
+      });
+    });
+
+    document.getElementById('live-share-btn')?.addEventListener('click', async () => {
+      const url = location.href;
+      try {
+        if (navigator.share) await navigator.share({ title: this.roomMeta?.title || 'Live Mushaira', url });
+        else {
+          await navigator.clipboard.writeText(url);
+          Components.showToast('Live link copied!');
+        }
+      } catch (_) {}
+    });
 
     const form = document.getElementById('live-room-chat-form');
     form?.addEventListener('submit', (e) => {
@@ -1069,7 +1121,12 @@ function renderLiveRoomView(meta) {
       <div id="live-host-panel" class="live-host-panel" hidden>
         <span class="live-host-badge">Host</span>
         <span class="live-host-hint">Tap participants to manage</span>
+        <button type="button" class="btn btn-outline-gold btn-sm" id="live-pause-btn" hidden>Pause Live</button>
         <button type="button" class="live-end-event-btn" id="live-end-event-btn" hidden>End Event</button>
+      </div>
+
+      <div id="live-paused-banner" class="live-paused-banner" hidden>
+        <span>Session Temporarily Paused</span>
       </div>
 
       <div id="live-mic-prompt" class="live-v2-notice" hidden>
@@ -1113,9 +1170,21 @@ function renderLiveRoomView(meta) {
           <span class="mic-icon live-dock-icon">🎤</span>
           <span class="mic-label live-dock-label">Mic Off</span>
         </button>
+        <button type="button" class="live-dock-btn" id="live-raise-hand-btn">
+          <span class="live-dock-icon">✋</span>
+          <span class="live-dock-label">Hand</span>
+        </button>
+        <button type="button" class="live-dock-btn" id="live-react-btn">
+          <span class="live-dock-icon">❤️</span>
+          <span class="live-dock-label">React</span>
+        </button>
+        <button type="button" class="live-dock-btn" id="live-share-btn">
+          <span class="live-dock-icon">↗</span>
+          <span class="live-dock-label">Share</span>
+        </button>
         <button type="button" class="live-dock-btn" id="live-leave-seat-btn">
           <span class="live-dock-icon">↩</span>
-          <span class="live-dock-label">Leave Seat</span>
+          <span class="live-dock-label">Leave</span>
         </button>
         <button type="button" class="live-dock-btn live-dock-exit" id="live-leave-btn">
           <span class="live-dock-icon">✕</span>

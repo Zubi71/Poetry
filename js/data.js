@@ -78,12 +78,12 @@ const APP_DATA = {
   ],
 
   mushairaEvents: [
-    { id: 1, title: 'Ali Raza & Guest Poets', date: '2026-06-16', time: '8:00 PM', location: 'Karachi, Pakistan', live: true, registered: 1200, watching: 1200, host: 'Ali Raza', tags: ['Poetry', 'Shayari', 'Urdu'], description: 'Opening Session — Live mushaira with guest poets' },
+    { id: 1, title: 'Ali Raza & Guest Poets', date: '2026-06-16', time: '8:00 PM', location: 'Karachi, Pakistan', live: true, registered: 1200, watching: 1200, likes: 1200, like_count: 1200, duration_minutes: 42, host: 'Ali Raza', tags: ['Poetry', 'Shayari', 'Urdu'], description: 'Opening Session — Live mushaira with guest poets' },
     { id: 2, title: 'Opening Session', date: '2026-06-16', time: '8:00 PM', location: 'Lahore, Pakistan', live: false, registered: 189, host: 'Ali Raza', tags: ['Poetry', 'Shayari'], description: 'Opening mushaira session with classical ghazals' },
     { id: 3, title: 'Nayi Awaaz', date: '2026-06-17', time: '7:30 PM', location: 'Islamabad, Pakistan', live: false, registered: 312, host: 'Parveen Shakir', tags: ['Poetry', 'Urdu'], description: 'Young poets showcase their best verses' },
     { id: 4, title: 'Youth Mushaira 2026', date: '2026-06-25', time: '6:00 PM', location: 'Islamabad, Pakistan', live: false, registered: 312, host: 'Parveen Shakir', tags: ['Poetry', 'Shayari', 'Urdu'], description: 'A celebration of young poetic voices' },
-    { id: 5, title: 'Special Mushaira Night', date: '2026-05-14', time: '9:00 PM', location: 'Delhi, India', live: false, ended: true, views: 3100, registered: 890, host: 'Faiz Ahmed Faiz', tags: ['Poetry', 'Shayari', 'Urdu'], description: 'An unforgettable night of ghazals and nazms' },
-    { id: 6, title: 'Classical Ghazal Evening', date: '2026-05-10', time: '9:00 PM', location: 'Delhi, India', live: false, ended: true, views: 2400, registered: 156, host: 'Mirza Ghalib', tags: ['Poetry', 'Ghazal'], description: 'Classical ghazal recitation under the stars' }
+    { id: 5, title: 'Special Mushaira Night', date: '2026-05-14', time: '9:00 PM', location: 'Delhi, India', live: false, ended: true, views: 3100, likes: 890, like_count: 890, duration_minutes: 95, registered: 890, host: 'Faiz Ahmed Faiz', tags: ['Poetry', 'Shayari', 'Urdu'], description: 'An unforgettable night of ghazals and nazms' },
+    { id: 6, title: 'Classical Ghazal Evening', date: '2026-05-10', time: '9:00 PM', location: 'Delhi, India', live: false, ended: true, views: 2400, likes: 560, like_count: 560, duration_minutes: 78, registered: 156, host: 'Mirza Ghalib', tags: ['Poetry', 'Ghazal'], description: 'Classical ghazal recitation under the stars' }
   ],
 
   voiceRooms: [
