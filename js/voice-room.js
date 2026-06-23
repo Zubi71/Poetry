@@ -464,7 +464,6 @@ const VoiceRoomLive = {
     this._updateMicUI();
     this._updateHostPanelVisibility();
     this._renderNowSpeaking();
-    this._renderAudienceStrip();
   },
 
   _renderParticipantList() {
@@ -522,33 +521,6 @@ const VoiceRoomLive = {
       <div class="live-waveform">${Array.from({ length: 18 }, () => '<span></span>').join('')}</div>
       <div class="live-now-speaking-level"><span></span><span></span><span></span><span></span></div>
     `;
-  },
-
-  _renderAudienceStrip() {
-    const strip = document.getElementById('live-audience-strip');
-    const caption = document.getElementById('live-audience-caption');
-    if (!strip) return;
-
-    const user = Auth.getCurrentUser();
-    const participants = this._getAllParticipants();
-    const shown = participants.slice(0, 9);
-
-    strip.innerHTML = shown.map(p => `
-      <div class="live-audience-avatar-wrap" title="${this._escape(p.name)}">
-        ${avatarImg(p.name, 'live-audience-avatar', p.name, p.avatar)}
-        ${!this._isAudible(p) ? '<span class="live-audience-muted">🔇</span>' : ''}
-      </div>
-    `).join('') + (participants.length > shown.length ? `<div class="live-audience-more">+${participants.length - shown.length}</div>` : '');
-
-    if (caption) {
-      if (!participants.length) {
-        caption.textContent = 'No one here yet';
-      } else {
-        const names = participants.slice(0, 2).map(p => p.userId === user?.id ? 'You' : (p.name || '').split(' ')[0]);
-        const extra = participants.length - names.length;
-        caption.textContent = extra > 0 ? `${names.join(', ')} and ${extra} others are listening` : `${names.join(', ')} ${names.length > 1 ? 'are' : 'is'} listening`;
-      }
-    }
   },
 
   async _handleSlotClick(slot) {
@@ -1347,9 +1319,7 @@ function renderLiveRoomView(meta) {
 
         <aside class="live-v2-sidebar">
           <section class="live-v2-participants-card">
-            <h3>Audience</h3>
-            <div id="live-audience-strip" class="live-audience-strip"></div>
-            <p id="live-audience-caption" class="live-audience-caption"></p>
+            <h3>Participants</h3>
             <div id="live-participants-list" class="live-participants-list"></div>
           </section>
           <section class="live-v2-chat-card">
