@@ -1,37 +1,31 @@
 /**
- * Live Mushaira / Voice Room — WebRTC audio + Supabase Realtime (WebSocket) sync.
- * Signaling, presence, seat state, and host commands use Supabase Realtime channels.
+ * Live Mushaira / Voice Room — LiveKit audio (SFU) + Supabase Realtime (WebSocket) sync.
+ * Presence, seat state, chat, and host commands use Supabase Realtime channels.
+ * Audio transport (publish/subscribe) is handled by a LiveKit Room, joined via a
+ * server-minted token from /api/livekit-token.
  */
 const LIVE_ROOM = {
   MUSHAIRA_SEATS: 20,
   VOICE_ROOM_SEATS: 20,
-  MAX_ACTIVE_SPEAKERS: 10,
-  ICE_SERVERS: [
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' },
-    { urls: 'stun:stun2.l.google.com:19302' }
-  ]
+  MAX_ACTIVE_SPEAKERS: 10
 };
 
 const VoiceRoomLive = {
   roomKey: null,
   roomMeta: null,
   channel: null,
-  localStream: null,
+  room: null,
   micOn: false,
   mutedByHost: false,
   canSpeak: true,
   isSpeaking: false,
   mySlot: null,
-  peers: new Map(),
   remoteAudios: new Map(),
-  pendingCandidates: new Map(),
   presenceState: {},
   chatMessages: [],
   _pollTimer: null,
   _storageKey: null,
-  _speakInterval: null,
-  _audioCtx: null,
+  _onActiveSpeakers: null,
   _paused: false,
   _sessionCommentsChannel: null,
   _handRequests: [],
@@ -82,6 +76,7 @@ const VoiceRoomLive = {
 
     if (SupabaseClient.isEnabled() && Auth.getCurrentUser()?.id) {
       await this._initSupabase();
+      await this._connectLiveKit();
     } else {
       this._initLocalFallback();
     }
@@ -120,7 +115,12 @@ const VoiceRoomLive = {
     if (this._handPollTimer) clearInterval(this._handPollTimer);
     this._stopSpeakingMonitor();
     this._stopMicTracks();
-    this._closeAllPeers();
+    if (this.room) {
+      try { this.room.disconnect(); } catch (_) {}
+      this.room = null;
+    }
+    this.remoteAudios.forEach(audio => audio.remove());
+    this.remoteAudios.clear();
     this.channel = null;
     this.roomKey = null;
     this.presenceState = {};
@@ -138,7 +138,7 @@ const VoiceRoomLive = {
   },
 
   _isTransmitting() {
-    return !!(this.micOn && this.localStream && !this.mutedByHost && this.canSpeak);
+    return !!(this.micOn && this.room && !this.mutedByHost && this.canSpeak);
   },
 
   _isAudible(p) {
@@ -147,10 +147,6 @@ const VoiceRoomLive = {
 
   _activeSpeakerCount() {
     return this._getAllParticipants().filter(p => this._isAudible(p)).length;
-  },
-
-  _shouldInitiateOffer(localId, remoteId) {
-    return String(localId).localeCompare(String(remoteId)) < 0;
   },
 
   _initLocalFallback() {
@@ -178,7 +174,6 @@ const VoiceRoomLive = {
       this._renderParticipantList();
       this._updateParticipantCount();
       this._updateSeatStats();
-      this._syncVoiceConnections();
     };
 
     this.channel
@@ -197,9 +192,6 @@ const VoiceRoomLive = {
       })
       .on('broadcast', { event: 'room_chat' }, ({ payload }) => {
         if (payload) this._appendChatMessage(payload, false);
-      })
-      .on('broadcast', { event: 'webrtc_signal' }, ({ payload }) => {
-        if (payload) this._handleSignal(payload);
       })
       .on('broadcast', { event: 'host_action' }, ({ payload }) => {
         if (payload) this._handleHostAction(payload);
@@ -664,18 +656,18 @@ const VoiceRoomLive = {
       return;
     }
 
+    if (!this.room) {
+      Components.showToast('Voice audio is unavailable right now', 'error');
+      return;
+    }
+
     try {
-      this.localStream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-        video: false
-      });
+      await this.room.localParticipant.setMicrophoneEnabled(true);
       this.micOn = true;
       await this._updateMySlot(this.mySlot);
       this._startSpeakingMonitor();
       this._renderSlots();
       this._renderParticipantList();
-      await this._syncVoiceConnections();
-      await this._addLocalTracksToPeers();
       Components.showToast('Microphone on — others can hear you now');
     } catch {
       Components.showToast('Allow microphone access in browser settings', 'error');
@@ -699,11 +691,9 @@ const VoiceRoomLive = {
     this.micOn = false;
     this.isSpeaking = false;
     this._stopSpeakingMonitor();
-    if (this.localStream) {
-      this.localStream.getTracks().forEach(t => t.stop());
-      this.localStream = null;
+    if (this.room) {
+      try { await this.room.localParticipant.setMicrophoneEnabled(false); } catch (_) {}
     }
-    await this._removeLocalTracksFromPeers();
     if (this.mySlot) await this._updateMySlot(this.mySlot);
     this._renderSlots();
     this._renderParticipantList();
@@ -711,216 +701,86 @@ const VoiceRoomLive = {
 
   _startSpeakingMonitor() {
     this._stopSpeakingMonitor();
-    if (!this.localStream) return;
+    if (!this.room) return;
 
-    try {
-      this._audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      const analyser = this._audioCtx.createAnalyser();
-      analyser.fftSize = 512;
-      const source = this._audioCtx.createMediaStreamSource(this.localStream);
-      source.connect(analyser);
-      const data = new Uint8Array(analyser.frequencyBinCount);
-
-      this._speakInterval = setInterval(async () => {
-        analyser.getByteFrequencyData(data);
-        const avg = data.reduce((a, b) => a + b, 0) / data.length;
-        const speaking = avg > 18 && this._isTransmitting();
-        if (speaking !== this.isSpeaking) {
-          this.isSpeaking = speaking;
-          await this._updateMySlot(this.mySlot);
-          this._renderSlots();
-          this._renderParticipantList();
-        }
-      }, 250);
-    } catch (_) {}
+    this._onActiveSpeakers = async (speakers) => {
+      const user = Auth.getCurrentUser();
+      const speaking = speakers.some(p => p.identity === user.id) && this._isTransmitting();
+      if (speaking !== this.isSpeaking) {
+        this.isSpeaking = speaking;
+        await this._updateMySlot(this.mySlot);
+        this._renderSlots();
+        this._renderParticipantList();
+      }
+    };
+    this.room.on(LivekitClient.RoomEvent.ActiveSpeakersChanged, this._onActiveSpeakers);
   },
 
   _stopSpeakingMonitor() {
-    if (this._speakInterval) clearInterval(this._speakInterval);
-    this._speakInterval = null;
-    if (this._audioCtx) {
-      try { this._audioCtx.close(); } catch (_) {}
-      this._audioCtx = null;
+    if (this.room && this._onActiveSpeakers) {
+      this.room.off(LivekitClient.RoomEvent.ActiveSpeakersChanged, this._onActiveSpeakers);
     }
+    this._onActiveSpeakers = null;
   },
 
-  /* ===== WebRTC (mesh among speakers; recv-only for listeners) ===== */
+  /* ===== LiveKit audio (SFU; server routes publish/subscribe) ===== */
 
-  async _createPeerConnection(remoteUserId) {
-    if (this.peers.has(remoteUserId)) {
-      const existing = this.peers.get(remoteUserId);
-      if (existing.connectionState !== 'closed') return existing;
-      this.peers.delete(remoteUserId);
+  async _connectLiveKit() {
+    if (typeof LivekitClient === 'undefined') {
+      console.warn('LiveKit client SDK not loaded');
+      return;
     }
-
-    const pc = new RTCPeerConnection({ iceServers: LIVE_ROOM.ICE_SERVERS });
-    this.peers.set(remoteUserId, pc);
-
-    pc.ontrack = (e) => {
-      const stream = e.streams[0] || new MediaStream([e.track]);
-      this._playRemoteAudio(remoteUserId, stream);
-    };
-
-    pc.onicecandidate = (e) => {
-      if (e.candidate) this._sendSignal(remoteUserId, { candidate: e.candidate.toJSON() });
-    };
-
-    pc.onconnectionstatechange = () => {
-      if (pc.connectionState === 'failed') {
-        this._closePeer(remoteUserId);
-        this._negotiateWithPeer(remoteUserId);
-      }
-    };
-
-    if (this._isTransmitting() && this.localStream) {
-      this.localStream.getTracks().forEach(track => pc.addTrack(track, this.localStream));
-    } else {
-      pc.addTransceiver('audio', { direction: 'recvonly' });
-    }
-
-    return pc;
-  },
-
-  async _negotiateWithPeer(remoteUserId) {
     const user = Auth.getCurrentUser();
-    const pc = await this._createPeerConnection(remoteUserId);
-
-    if (this._shouldInitiateOffer(user.id, remoteUserId) && pc.signalingState === 'stable') {
-      try {
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        this._sendSignal(remoteUserId, { sdp: pc.localDescription });
-      } catch (err) {
-        console.warn('Offer error:', err);
-      }
-    }
-  },
-
-  async _syncVoiceConnections() {
-    const user = Auth.getCurrentUser();
-    const needed = new Set();
-
-    this._getAllParticipants().forEach(p => {
-      if (p.userId === user.id) return;
-      if (this._isAudible(p)) needed.add(p.userId);
-      if (this._isTransmitting()) needed.add(p.userId);
-    });
-
-    for (const id of needed) {
-      await this._negotiateWithPeer(id);
-    }
-
-    for (const [id] of this.peers) {
-      if (!needed.has(id)) this._closePeer(id);
-    }
-  },
-
-  async _addLocalTracksToPeers() {
-    if (!this.localStream) return;
-    for (const [remoteId, pc] of this.peers) {
-      if (pc.connectionState === 'closed') continue;
-      const hasAudio = pc.getSenders().some(s => s.track?.kind === 'audio');
-      if (!hasAudio) {
-        this.localStream.getTracks().forEach(t => pc.addTrack(t, this.localStream));
-        const user = Auth.getCurrentUser();
-        if (this._shouldInitiateOffer(user.id, remoteId) && pc.signalingState === 'stable') {
-          const offer = await pc.createOffer();
-          await pc.setLocalDescription(offer);
-          this._sendSignal(remoteId, { sdp: pc.localDescription });
-        }
-      }
-    }
-  },
-
-  async _removeLocalTracksFromPeers() {
-    for (const [, pc] of this.peers) {
-      pc.getSenders().forEach(s => { if (s.track) pc.removeTrack(s); });
-    }
-    await this._syncVoiceConnections();
-  },
-
-  _closePeer(remoteUserId) {
-    const pc = this.peers.get(remoteUserId);
-    if (pc) {
-      try { pc.close(); } catch (_) {}
-      this.peers.delete(remoteUserId);
-    }
-    this.pendingCandidates.delete(remoteUserId);
-    const audio = this.remoteAudios.get(remoteUserId);
-    if (audio) {
-      audio.srcObject = null;
-      audio.remove();
-      this.remoteAudios.delete(remoteUserId);
-    }
-  },
-
-  _closeAllPeers() {
-    for (const id of [...this.peers.keys()]) this._closePeer(id);
-  },
-
-  _sendSignal(toUserId, data) {
-    const user = Auth.getCurrentUser();
-    const payload = { from: user.id, to: toUserId, ...data };
-    if (this.channel) {
-      this.channel.send({ type: 'broadcast', event: 'webrtc_signal', payload });
-    }
-  },
-
-  async _handleSignal(payload) {
-    const user = Auth.getCurrentUser();
-    if (payload.to !== user.id) return;
-
-    const remoteId = payload.from;
-    let pc = this.peers.get(remoteId);
-    if (!pc) pc = await this._createPeerConnection(remoteId);
+    if (!user?.id) return;
 
     try {
-      if (payload.sdp) {
-        const desc = new RTCSessionDescription(payload.sdp);
-        if (desc.type === 'offer') {
-          await pc.setRemoteDescription(desc);
-          await this._flushPendingCandidates(remoteId, pc);
-          const answer = await pc.createAnswer();
-          await pc.setLocalDescription(answer);
-          this._sendSignal(remoteId, { sdp: pc.localDescription });
-        } else if (desc.type === 'answer') {
-          await pc.setRemoteDescription(desc);
-          await this._flushPendingCandidates(remoteId, pc);
-        }
-      } else if (payload.candidate?.candidate) {
-        if (pc.remoteDescription) {
-          await pc.addIceCandidate(new RTCIceCandidate(payload.candidate));
-        } else {
-          if (!this.pendingCandidates.has(remoteId)) this.pendingCandidates.set(remoteId, []);
-          this.pendingCandidates.get(remoteId).push(payload.candidate);
-        }
-      }
+      const resp = await fetch('/api/livekit-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roomName: `voice-${this.roomKey}`, identity: user.id, name: user.name })
+      });
+      if (!resp.ok) throw new Error('token request failed');
+      const { token, url } = await resp.json();
+      if (!token || !url) throw new Error('missing token/url');
+
+      const room = new LivekitClient.Room({ adaptiveStream: true, dynacast: true });
+      room
+        .on(LivekitClient.RoomEvent.TrackSubscribed, (track, _pub, participant) => {
+          if (track.kind === LivekitClient.Track.Kind.Audio) {
+            this._playRemoteAudio(participant.identity, track);
+          }
+        })
+        .on(LivekitClient.RoomEvent.TrackUnsubscribed, (track, _pub, participant) => {
+          if (track.kind === LivekitClient.Track.Kind.Audio) {
+            this._stopRemoteAudio(participant.identity);
+          }
+        });
+
+      await room.connect(url, token);
+      this.room = room;
     } catch (err) {
-      console.warn('WebRTC signal error:', err);
+      console.warn('LiveKit connect error:', err);
+      Components.showToast('Voice audio unavailable — chat still works', 'error');
     }
   },
 
-  async _flushPendingCandidates(remoteId, pc) {
-    const pending = this.pendingCandidates.get(remoteId) || [];
-    this.pendingCandidates.delete(remoteId);
-    for (const c of pending) {
-      try { await pc.addIceCandidate(new RTCIceCandidate(c)); } catch (_) {}
-    }
-  },
-
-  _playRemoteAudio(userId, stream) {
-    let audio = this.remoteAudios.get(userId);
-    if (!audio) {
-      audio = document.createElement('audio');
-      audio.autoplay = true;
-      audio.playsInline = true;
-      audio.setAttribute('playsinline', '');
-      audio.style.display = 'none';
+  _playRemoteAudio(userId, track) {
+    const existing = this.remoteAudios.get(userId);
+    const audio = track.attach(existing);
+    audio.style.display = 'none';
+    audio.setAttribute('playsinline', '');
+    if (!existing) {
       document.body.appendChild(audio);
       this.remoteAudios.set(userId, audio);
     }
-    audio.srcObject = stream;
-    audio.play().catch(() => {});
+  },
+
+  _stopRemoteAudio(userId) {
+    const audio = this.remoteAudios.get(userId);
+    if (audio) {
+      audio.remove();
+      this.remoteAudios.delete(userId);
+    }
   },
 
   _applySessionStatus(status) {
