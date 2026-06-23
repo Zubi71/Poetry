@@ -405,17 +405,21 @@ const VoiceRoomLive = {
     const hostMuted = occupant?.mutedByHost;
     const size = opts.size || 'md';
 
+    const micGlyph = speaking
+      ? '<span class="live-slot-mic-bars"><span></span><span></span><span></span></span>'
+      : (audible ? '🎙️' : '🔇');
+
     if (occupant) {
       const micBtn = isMe && !hostMuted && this.canSpeak ? `
         <button type="button" class="live-slot-mic ${audible ? 'on' : 'off'} mic-toggle-btn" aria-label="${audible ? 'Mute' : 'Unmute'}">
-          ${speaking ? '🗣️' : audible ? '🎙️' : '🔇'}
+          ${micGlyph}
         </button>
-      ` : `<span class="live-slot-mic ${hostMuted ? 'host-muted' : audible ? 'on' : 'off'}">${hostMuted ? '🚫' : speaking ? '🗣️' : audible ? '🎙️' : '🔇'}</span>`;
+      ` : `<span class="live-slot-mic ${hostMuted ? 'host-muted' : audible ? 'on' : 'off'}">${hostMuted ? '🚫' : micGlyph}</span>`;
 
       return `
         <button type="button" class="live-slot occupied size-${size} ${isMe ? 'me' : ''} ${speaking ? 'speaking' : audible ? 'live' : ''} ${hostMuted ? 'host-muted' : ''}" data-slot="${slot}">
           <div class="live-slot-avatar-wrap">
-            ${avatarImg(occupant.name, 'live-slot-avatar', occupant.name)}
+            ${avatarImg(occupant.name, 'live-slot-avatar', occupant.name, occupant.avatar)}
             ${micBtn}
           </div>
           <div class="live-slot-meta">
@@ -459,6 +463,8 @@ const VoiceRoomLive = {
     this._bindSlotGrid(grid);
     this._updateMicUI();
     this._updateHostPanelVisibility();
+    this._renderNowSpeaking();
+    this._renderAudienceStrip();
   },
 
   _renderParticipantList() {
@@ -474,7 +480,7 @@ const VoiceRoomLive = {
       const isMe = p.userId === user?.id;
       return `
         <div class="live-participant-row ${status.cls}" data-user-id="${p.userId}">
-          ${avatarImg(p.name, 'live-participant-avatar', p.name)}
+          ${avatarImg(p.name, 'live-participant-avatar', p.name, p.avatar)}
           <div class="live-participant-info">
             <strong>${isMe ? 'You' : this._escape(p.name)}${p.isHost ? ' · Host' : ''}</strong>
             <span class="live-participant-status">${status.label}${p.slot ? ` · #${p.slot}` : ''}</span>
@@ -492,6 +498,57 @@ const VoiceRoomLive = {
     list.querySelectorAll('.host-action-btn').forEach(b => {
       b.onclick = () => this._hostAction(b.dataset.action, b.dataset.userId);
     });
+  },
+
+  _renderNowSpeaking() {
+    const bar = document.getElementById('live-now-speaking');
+    if (!bar) return;
+    const user = Auth.getCurrentUser();
+    const speaker = this._getAllParticipants().find(p => p.isSpeaking && this._isAudible(p));
+
+    if (!speaker) {
+      bar.hidden = true;
+      bar.innerHTML = '';
+      return;
+    }
+
+    bar.hidden = false;
+    bar.innerHTML = `
+      ${avatarImg(speaker.name, 'live-now-speaking-avatar', speaker.name, speaker.avatar)}
+      <div class="live-now-speaking-info">
+        <span class="live-now-speaking-label">Now Speaking</span>
+        <strong>${speaker.userId === user?.id ? 'You' : this._escape(speaker.name)}</strong>
+      </div>
+      <div class="live-waveform">${Array.from({ length: 18 }, () => '<span></span>').join('')}</div>
+      <div class="live-now-speaking-level"><span></span><span></span><span></span><span></span></div>
+    `;
+  },
+
+  _renderAudienceStrip() {
+    const strip = document.getElementById('live-audience-strip');
+    const caption = document.getElementById('live-audience-caption');
+    if (!strip) return;
+
+    const user = Auth.getCurrentUser();
+    const participants = this._getAllParticipants();
+    const shown = participants.slice(0, 9);
+
+    strip.innerHTML = shown.map(p => `
+      <div class="live-audience-avatar-wrap" title="${this._escape(p.name)}">
+        ${avatarImg(p.name, 'live-audience-avatar', p.name, p.avatar)}
+        ${!this._isAudible(p) ? '<span class="live-audience-muted">🔇</span>' : ''}
+      </div>
+    `).join('') + (participants.length > shown.length ? `<div class="live-audience-more">+${participants.length - shown.length}</div>` : '');
+
+    if (caption) {
+      if (!participants.length) {
+        caption.textContent = 'No one here yet';
+      } else {
+        const names = participants.slice(0, 2).map(p => p.userId === user?.id ? 'You' : (p.name || '').split(' ')[0]);
+        const extra = participants.length - names.length;
+        caption.textContent = extra > 0 ? `${names.join(', ')} and ${extra} others are listening` : `${names.join(', ')} ${names.length > 1 ? 'are' : 'is'} listening`;
+      }
+    }
   },
 
   async _handleSlotClick(slot) {
@@ -1240,7 +1297,7 @@ function renderLiveRoomView(meta) {
         <a href="${meta.backPath || '#/voice-rooms'}" class="live-v2-back" aria-label="Back">${Components.icon('back')}</a>
         <div class="live-v2-header-main">
           <div class="live-v2-title-row">
-            <h1>${meta.title}</h1>
+            <h1>${meta.title} <span class="live-v2-title-feather">🪶</span></h1>
             <span class="live-v2-badge">LIVE</span>
           </div>
           <p class="live-v2-host">Host · ${meta.host}</p>
@@ -1280,15 +1337,19 @@ function renderLiveRoomView(meta) {
       <div class="live-v2-body">
         <section class="live-v2-seats-card">
           <div class="live-v2-seats-head">
-            <h2>Seating</h2>
+            <h2>Speakers on Stage</h2>
             <span class="live-v2-seats-cap">${maxSeats} seats</span>
           </div>
           <div class="live-room-slots live-v2-slots" id="live-room-slots"></div>
+
+          <div id="live-now-speaking" class="live-now-speaking" hidden></div>
         </section>
 
         <aside class="live-v2-sidebar">
           <section class="live-v2-participants-card">
-            <h3>Participants</h3>
+            <h3>Audience</h3>
+            <div id="live-audience-strip" class="live-audience-strip"></div>
+            <p id="live-audience-caption" class="live-audience-caption"></p>
             <div id="live-participants-list" class="live-participants-list"></div>
           </section>
           <section class="live-v2-chat-card">
