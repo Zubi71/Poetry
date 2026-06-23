@@ -82,7 +82,7 @@ const Write = {
           </div>
           <div class="write-modal-body">
             <div class="write-compose-row">
-              ${avatarImg(user.name, 'write-avatar', user.name)}
+              ${avatarImg(user.name, 'write-avatar', user.name, user.avatar)}
               <textarea id="write-poem-text" class="write-textarea urdu-text" placeholder="What's on your mind? اپنی شاعری لکھیں..." rows="4">${draft?.text || ''}</textarea>
             </div>
 

@@ -343,7 +343,7 @@ const Pages = {
               ${Components.icon('bell')}
               ${unread ? `<span class="mushaira-v2-badge">${unread > 9 ? '9+' : unread}</span>` : ''}
             </a>
-            <a href="#/dashboard" class="mushaira-v2-avatar-link">${avatarImg(user.name, 'mushaira-v2-avatar', user.name)}</a>
+            <a href="#/dashboard" class="mushaira-v2-avatar-link">${avatarImg(user.name, 'mushaira-v2-avatar', user.name, user.avatar)}</a>
           </div>
         </header>
 
@@ -718,8 +718,20 @@ const Pages = {
           <h2>Account Settings</h2>
           <form id="account-form" class="settings-form">
             <div class="form-group">
+              <label>Profile Picture</label>
+              <div class="avatar-upload-row">
+                ${avatarImg(user.name, 'avatar-upload-preview', user.name, user.avatar)}
+                <input type="file" name="avatar" id="avatar-file-input" accept="image/*" hidden>
+                <button type="button" class="btn btn-outline-gold btn-sm" id="avatar-upload-btn">Change Photo</button>
+              </div>
+            </div>
+            <div class="form-group">
               <label>Name</label>
               <input type="text" name="name" value="${user.name || ''}">
+            </div>
+            <div class="form-group">
+              <label>Bio</label>
+              <textarea name="bio" rows="3" placeholder="Tell others about yourself...">${user.bio || ''}</textarea>
             </div>
             <div class="form-group">
               <label>Email</label>
@@ -938,7 +950,6 @@ const Pages = {
     const drafts = Storage.getDrafts();
     const myPosts = Storage.getUserPosts().filter(p => p.poetName === user.name);
     const likedPoems = Storage.getLikes().map(id => getPoemById(id)).filter(Boolean);
-    const starredPoems = Storage.getBookmarks().map(id => getPoemById(id)).filter(Boolean);
     const poetMatch = APP_DATA.poets.find(p => p.name === user.name);
     const username = user.username || user.name?.toLowerCase().replace(/\s+/g, '') || 'poet';
     const followers = poetMatch?.followers || 0;
@@ -955,10 +966,6 @@ const Pages = {
       tabContent = drafts.length
         ? drafts.map(d => Components.renderProfileDraftCard(d)).join('')
         : '<p class="empty-state">No drafts yet. Start writing!</p>';
-    } else if (tab === 'starred') {
-      tabContent = starredPoems.length
-        ? starredPoems.map(p => Components.renderProfilePoemCard(p)).join('')
-        : '<p class="empty-state">No starred poems yet.</p>';
     } else {
       tabContent = myPosts.length
         ? myPosts.map(p => Components.renderProfilePoemCard(p)).join('')
@@ -983,8 +990,7 @@ const Pages = {
       tabs: [
         { label: 'Poems', href: '#/dashboard?tab=poems', active: tab === 'poems' },
         { label: 'Likes', href: '#/dashboard?tab=likes', active: tab === 'likes' },
-        { label: 'Drafts', href: '#/dashboard?tab=drafts', active: tab === 'drafts' },
-        { label: 'Starred', href: '#/dashboard?tab=starred', active: tab === 'starred' }
+        { label: 'Drafts', href: '#/dashboard?tab=drafts', active: tab === 'drafts' }
       ],
       tabContent
     });

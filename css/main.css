@@ -2823,6 +2823,9 @@ input:focus, select:focus, textarea:focus {
 
 .settings-form .btn { margin-top: 8px; }
 
+.avatar-upload-row { display: flex; align-items: center; gap: 14px; }
+.avatar-upload-preview { width: 64px; height: 64px; border-radius: 50%; object-fit: cover; }
+
 .guidelines p { color: var(--text-secondary); font-size: 14px; line-height: 1.7; }
 
 /* ===== Premium ===== */

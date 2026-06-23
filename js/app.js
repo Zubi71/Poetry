@@ -588,13 +588,33 @@ const App = {
     // Settings forms
     const accountForm = document.getElementById('account-form');
     if (accountForm) {
-      accountForm.onsubmit = (e) => {
+      const avatarUploadBtn = document.getElementById('avatar-upload-btn');
+      const avatarFileInput = document.getElementById('avatar-file-input');
+      if (avatarUploadBtn && avatarFileInput) {
+        avatarUploadBtn.onclick = () => avatarFileInput.click();
+        avatarFileInput.onchange = async () => {
+          const file = avatarFileInput.files[0];
+          if (!file) return;
+          const url = await API.uploadAvatar(file);
+          if (!url) { Components.showToast('Could not upload photo', 'error'); return; }
+          const user = Auth.getCurrentUser();
+          user.avatar = url;
+          Storage.setUser(user);
+          const preview = accountForm.querySelector('.avatar-upload-preview');
+          if (preview) preview.src = url;
+          Components.showToast('Profile picture updated!');
+        };
+      }
+
+      accountForm.onsubmit = async (e) => {
         e.preventDefault();
         const user = Auth.getCurrentUser();
         const data = new FormData(accountForm);
         user.name = data.get('name');
+        user.bio = data.get('bio');
         if (data.get('email')) user.email = data.get('email');
         Storage.setUser(user);
+        await API.updateProfile({ displayName: user.name, bio: user.bio });
         Components.showToast('Settings saved!');
       };
     }

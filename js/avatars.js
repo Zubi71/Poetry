@@ -35,9 +35,9 @@ function resolveAvatar(nameOrUrl, nameFallback = 'User') {
   return getAvatarUrl(String(nameOrUrl));
 }
 
-function avatarImg(name, className = '', alt = '') {
+function avatarImg(name, className = '', alt = '', avatarUrl = '') {
   const label = alt || name || 'User';
-  const src = getAvatarUrl(label);
+  const src = resolveAvatar(avatarUrl, label);
   const fallback = getAvatarUrl('User');
   const cls = className ? ` class="${className}"` : '';
   return `<img src="${src}" alt=""${cls} loading="lazy" onerror="this.onerror=null;this.src='${fallback}'">`;

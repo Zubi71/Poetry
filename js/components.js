@@ -86,7 +86,7 @@ const Components = {
           </a>
           <div class="user-menu">
             <a href="${Auth.isGuest() ? '#/login' : '#/dashboard'}" class="user-avatar-link" aria-label="My profile">
-              ${avatarImg(user.name, 'user-avatar')}
+              ${avatarImg(user.name, 'user-avatar', user.name, user.avatar)}
             </a>
             <div class="user-info">
               <span class="user-name">${user.name}</span>
@@ -334,7 +334,7 @@ const Components = {
       <div class="profile-v2">
         <div class="profile-v2-top">
           <div class="profile-v2-avatar-wrap">
-            ${avatarImg(user.name, 'profile-v2-avatar', user.name)}
+            ${avatarImg(user.name, 'profile-v2-avatar', user.name, user.avatar)}
             <span class="profile-v2-online" aria-label="Online"></span>
           </div>
           <div class="profile-v2-info">

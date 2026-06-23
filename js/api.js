@@ -340,6 +340,13 @@ const API = {
     return avatarUrl;
   },
 
+  async updateProfile({ displayName, bio }) {
+    const sb = SupabaseClient.get();
+    const user = Auth.getCurrentUser();
+    if (!sb || !user?.id) return;
+    await sb.from('profiles').update({ display_name: displayName, bio }).eq('id', user.id);
+  },
+
   async syncUserData() {
     if (!SupabaseClient.isEnabled()) return;
     const likes = await this.getUserLikes();
