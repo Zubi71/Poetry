@@ -499,20 +499,6 @@ const MushairaEvents = {
     `;
   },
 
-  renderEndedFilters(active = 'all') {
-    const base = '#/mushaira?tab=ended';
-    return `
-      <nav class="mushaira-v2-subtabs" aria-label="Ended session filters">
-        <a href="${base}&efilter=all" class="mushaira-v2-subtab ${active === 'all' ? 'active' : ''}">All</a>
-        <a href="${base}&efilter=views" class="mushaira-v2-subtab ${active === 'views' ? 'active' : ''}">Most Viewed</a>
-        <a href="${base}&efilter=poetry" class="mushaira-v2-subtab ${active === 'poetry' ? 'active' : ''}">Poetry</a>
-        <a href="${base}&efilter=shayari" class="mushaira-v2-subtab ${active === 'shayari' ? 'active' : ''}">Shayari</a>
-        <a href="${base}&efilter=week" class="mushaira-v2-subtab ${active === 'week' ? 'active' : ''}">This Week</a>
-        <a href="${base}&efilter=month" class="mushaira-v2-subtab ${active === 'month' ? 'active' : ''}">This Month</a>
-      </nav>
-    `;
-  },
-
   _filterEndedEvents(events, filter) {
     let list = [...events];
     const now = Date.now();
@@ -538,10 +524,9 @@ const MushairaEvents = {
   renderEndedTab(endedEvents, filter = 'all') {
     const list = this._filterEndedEvents(endedEvents, filter);
     if (!list.length) {
-      return this.renderEndedFilters(filter) + '<p class="empty-state">No past sessions yet.</p>';
+      return '<p class="empty-state">No past sessions yet.</p>';
     }
     return `
-      ${this.renderEndedFilters(filter)}
       <div class="mushaira-v2-ended-head">
         <h3>Past Sessions</h3>
       </div>
