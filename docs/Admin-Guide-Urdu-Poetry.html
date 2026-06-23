@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Urdu Poetry — Admin Guide</title>
+  <style>
+    @page { margin: 2cm; }
+    body {
+      font-family: Georgia, 'Times New Roman', serif;
+      line-height: 1.55;
+      color: #1a1a1a;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 40px 48px;
+    }
+    h1 {
+      font-size: 28px;
+      border-bottom: 3px solid #D4AF37;
+      padding-bottom: 12px;
+      margin-bottom: 8px;
+    }
+    .subtitle {
+      color: #555;
+      font-size: 14px;
+      margin-bottom: 32px;
+    }
+    h2 {
+      font-size: 20px;
+      color: #333;
+      margin-top: 28px;
+      margin-bottom: 12px;
+      border-left: 4px solid #D4AF37;
+      padding-left: 12px;
+    }
+    h3 {
+      font-size: 16px;
+      margin-top: 20px;
+      margin-bottom: 8px;
+    }
+    p, li { font-size: 14px; }
+    ul { padding-left: 22px; }
+    li { margin-bottom: 6px; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0 24px;
+      font-size: 13px;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 10px 12px;
+      text-align: left;
+    }
+    th {
+      background: #f5f0e0;
+      font-weight: 600;
+    }
+    tr:nth-child(even) { background: #fafafa; }
+    .note {
+      background: #fff9e6;
+      border: 1px solid #D4AF37;
+      border-radius: 6px;
+      padding: 14px 16px;
+      font-size: 13px;
+      margin: 16px 0;
+    }
+    code {
+      background: #f0f0f0;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-size: 12px;
+    }
+    .footer {
+      margin-top: 40px;
+      padding-top: 16px;
+      border-top: 1px solid #ddd;
+      font-size: 12px;
+      color: #777;
+    }
+  </style>
+</head>
+<body>
+
+<h1>Urdu Poetry — Admin Guide</h1>
+<p class="subtitle">What administrators can do in the system · Generated June 2026</p>
+
+<h2>How someone becomes admin</h2>
+<p>Admin access is checked when either:</p>
+<ul>
+  <li>The user's profile has <code>user_role = 'admin'</code> in Supabase, <strong>or</strong></li>
+  <li>They log in as <code>admin@urdupoetry.com</code> (hardcoded fallback for local/demo use)</li>
+</ul>
+<p>To set the first real admin in Supabase, run <code>supabase/migrate-user-role.sql</code> in the Supabase SQL Editor (it can promote a user by email).</p>
+
+<h2>Where admins go</h2>
+<ul>
+  <li><strong>Route:</strong> <code>#/admin</code> (Admin Dashboard)</li>
+  <li><strong>Link:</strong> Settings → <strong>Admin Panel</strong> (only shown if the user is an admin)</li>
+</ul>
+<p>Non-admins see "Admin Access Required" on that page.</p>
+
+<h2>What admins can do (Admin Dashboard)</h2>
+
+<h3>1. Manage user roles</h3>
+<ul>
+  <li>See all registered users (email, name, username)</li>
+  <li>Change any user between <strong>user</strong> and <strong>admin</strong></li>
+  <li>Changes are saved to Supabase via <code>set_user_role</code></li>
+  <li><strong>Rule:</strong> An admin cannot remove their own admin role</li>
+</ul>
+
+<h3>2. Manage writing tags</h3>
+<ul>
+  <li>Add, edit, and delete the scrolling tags in the Write / compose window (Urdu + English labels)</li>
+  <li><strong>Save Tags</strong> writes to Supabase <code>writing_tags</code> (admin-only in database)</li>
+</ul>
+
+<h3>3. Review reports (moderation)</h3>
+<ul>
+  <li>See pending reports (posts or users reported by others)</li>
+  <li><strong>Approve</strong> or <strong>Remove</strong> each report</li>
+  <li>Updates report status in Supabase (admin-only policies on <code>reports</code>)</li>
+</ul>
+
+<h3>4. Contest overview (read-only)</h3>
+<ul>
+  <li>View active contests (title, entries, deadline, prize)</li>
+  <li><strong>View Submissions</strong> links to contests page — no full contest create/edit/delete in admin yet</li>
+</ul>
+
+<h2>Backend powers (API / Supabase) — not all have UI</h2>
+<table>
+  <thead>
+    <tr>
+      <th>Capability</th>
+      <th>In admin UI?</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Set featured poem (<code>featured_poem</code> table)</td>
+      <td><strong>No UI</strong> — API only (<code>API.setFeaturedPoem</code>)</td>
+    </tr>
+    <tr>
+      <td>Update any user profile (database policy)</td>
+      <td><strong>No dedicated UI</strong> — policy allows admins to update profiles</td>
+    </tr>
+    <tr>
+      <td>View / update all reports</td>
+      <td><strong>Partial</strong> — UI uses local storage; Supabase sync when online</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>What admins cannot do (by design)</h2>
+<ul>
+  <li><strong>End someone else's live mushaira</strong> — only the event host can use End Event</li>
+  <li><strong>Delete any poem/post globally</strong> — no admin "delete content" tool in the panel</li>
+  <li><strong>Manage voice rooms for others</strong> — no admin voice-room controls</li>
+  <li><strong>Ban users</strong> — only role change (user/admin), no ban or suspend flow</li>
+</ul>
+
+<h2>Admin vs regular user vs mushaira host</h2>
+<table>
+  <thead>
+    <tr>
+      <th>Action</th>
+      <th>Regular user</th>
+      <th>Admin</th>
+      <th>Mushaira host</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td>Post poetry, join rooms</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+    <tr><td>Create mushaira</td><td>Yes (logged in)</td><td>Yes</td><td>Yes</td></tr>
+    <tr><td>End / delete own mushaira</td><td>Yes (host only)</td><td>Only if they created it</td><td>Yes</td></tr>
+    <tr><td>Admin dashboard</td><td>No</td><td>Yes</td><td>If also admin</td></tr>
+    <tr><td>Promote users to admin</td><td>No</td><td>Yes</td><td>No</td></tr>
+    <tr><td>Manage writing tags</td><td>No</td><td>Yes</td><td>No</td></tr>
+    <tr><td>Resolve reports</td><td>No</td><td>Yes</td><td>No</td></tr>
+  </tbody>
+</table>
+
+<div class="note">
+  <strong>Summary:</strong> Admins run the Admin Dashboard — user roles, writing tags, and report moderation — plus backend access to featured poem and profile updates. They do <strong>not</strong> automatically control live mushairas or all site content unless they are also the host.
+</div>
+
+<h2>Related Supabase files</h2>
+<ul>
+  <li><code>supabase/migrate-user-role.sql</code> — user roles and admin policies</li>
+  <li><code>supabase/admin.sql</code> — admin RPC functions</li>
+  <li><code>supabase/schema.sql</code> — full schema including admin RLS policies</li>
+</ul>
+
+<p class="footer">
+  Urdu Poetry Website · GitHub: github.com/Zubi71/Poetry · Live: poetry-eta-ten.vercel.app
+</p>
+
+</body>
+</html>
