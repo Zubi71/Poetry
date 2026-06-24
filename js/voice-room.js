@@ -510,6 +510,10 @@ const VoiceRoomLive = {
   },
 
   _renderSlots() {
+    // React room owns this state via getSnapshot()/_emit() and has no
+    // 'live-room-slots' element — emit must fire regardless of whether the
+    // vanilla DOM target exists, or React never finds out state changed.
+    this._emit();
     const grid = document.getElementById('live-room-slots');
     if (!grid) return;
 
@@ -556,6 +560,7 @@ const VoiceRoomLive = {
   },
 
   _renderParticipantList() {
+    this._emit();
     const list = document.getElementById('live-participants-list');
     if (!list) return;
 
@@ -975,6 +980,7 @@ const VoiceRoomLive = {
   },
 
   async _renderDonations() {
+    this._emit();
     const box = document.getElementById('live-donations-list');
     if (!box || !this.roomMeta?.eventId) return;
     let supporters = [];
@@ -1021,15 +1027,18 @@ const VoiceRoomLive = {
   },
 
   async _renderHandRequests() {
+    if (this._isHost() && this.roomMeta?.eventId) {
+      this._handRequests = SupabaseClient.isEnabled()
+        ? await API.fetchSpeakerRequests(this.roomMeta.eventId)
+        : [];
+    }
+    this._emit();
     const panel = document.getElementById('live-hand-requests');
     if (!panel || !this._isHost() || !this.roomMeta?.eventId) {
       if (panel) panel.hidden = true;
       return;
     }
     panel.hidden = false;
-    this._handRequests = SupabaseClient.isEnabled()
-      ? await API.fetchSpeakerRequests(this.roomMeta.eventId)
-      : [];
     const list = document.getElementById('live-hand-requests-list');
     if (!list) return;
     if (!this._handRequests.length) {
@@ -1343,6 +1352,7 @@ const VoiceRoomLive = {
   },
 
   _renderChat() {
+    this._emit();
     const box = document.getElementById('live-room-messages');
     if (!box) return;
     const user = Auth.getCurrentUser();
