@@ -861,7 +861,10 @@ const MushairaEvents = {
       sessionStatus: event.status || (event.live ? 'live' : 'scheduled'),
       maxSeats: LIVE_ROOM.MUSHAIRA_SEATS,
       backPath: '#/mushaira',
-      leavePath: '/mushaira'
+      leavePath: '/mushaira',
+      tags: event.tags,
+      date: event.date,
+      time: event.time
     });
 
     const liveRoom = document.querySelector('.live-room-page');
@@ -876,7 +879,10 @@ const MushairaEvents = {
         roomType: liveRoom.dataset.roomType || 'mushaira',
         sessionStatus: liveRoom.dataset.sessionStatus || 'live',
         maxSeats: parseInt(liveRoom.dataset.maxSeats, 10) || LIVE_ROOM.MUSHAIRA_SEATS,
-        leavePath: liveRoom.dataset.leavePath || '/mushaira'
+        leavePath: liveRoom.dataset.leavePath || '/mushaira',
+        tags: liveRoom.dataset.tags ? liveRoom.dataset.tags.split('|') : [],
+        date: liveRoom.dataset.date || '',
+        time: liveRoom.dataset.time || ''
       });
     }
   },

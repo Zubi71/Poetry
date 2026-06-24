@@ -66,11 +66,12 @@ const VoiceRoomLive = {
     this._applySessionStatus(meta.sessionStatus);
     await this._loadSessionChat(eventId);
     this._subscribeSessionComments(eventId);
-    this._renderSlots();
-    this._renderParticipantList();
-    this._renderChat();
-    this._renderDonations();
-    this._renderHandRequests();
+    this._safe(() => this._renderSlots());
+    this._safe(() => this._renderParticipantList());
+    this._safe(() => this._renderChat());
+    this._safe(() => this._renderDonations());
+    this._safe(() => this._renderEventDetails());
+    this._safe(() => this._renderHandRequests());
     this._bindControls();
     this._updateHostPanelVisibility();
 
@@ -87,6 +88,17 @@ const VoiceRoomLive = {
 
     if (this._isHost() && this.roomMeta?.eventId) {
       this._handPollTimer = setInterval(() => this._renderHandRequests(), 5000);
+    }
+  },
+
+  _safe(fn) {
+    try {
+      const result = fn();
+      if (result && typeof result.catch === 'function') {
+        result.catch(err => console.error('VoiceRoomLive render error:', err));
+      }
+    } catch (err) {
+      console.error('VoiceRoomLive render error:', err);
     }
   },
 
@@ -356,6 +368,7 @@ const VoiceRoomLive = {
     const panel = document.getElementById('live-host-panel');
     const endBtn = document.getElementById('live-end-event-btn');
     const pauseBtn = document.getElementById('live-pause-btn');
+    const hostParticipants = document.getElementById('live-host-participants');
     const isHost = this._isHost();
     const isMushaira = this.roomMeta?.roomType === 'mushaira' && this.roomMeta?.eventId;
 
@@ -365,6 +378,7 @@ const VoiceRoomLive = {
       pauseBtn.hidden = !(isHost && isMushaira);
       pauseBtn.textContent = this._paused ? 'Resume Live' : 'Pause Live';
     }
+    if (hostParticipants) hostParticipants.hidden = !isHost;
     this._renderHandRequests();
   },
 
@@ -464,6 +478,37 @@ const VoiceRoomLive = {
     this._updateMicUI();
     this._updateHostPanelVisibility();
     this._renderNowSpeaking();
+    this._renderAudienceStrip();
+  },
+
+  _renderAudienceStrip() {
+    const strip = document.getElementById('live-audience-strip');
+    if (!strip) return;
+
+    const user = Auth.getCurrentUser();
+    const participants = this._getAllParticipants();
+    const shown = participants.slice(0, 9);
+
+    strip.innerHTML = shown.map(p => `
+      <div class="live-audience-avatar-wrap" title="${this._escape(p.name)}">
+        ${avatarImg(p.name, 'live-audience-avatar', p.name, p.avatar)}
+        ${!this._isAudible(p) ? '<span class="live-audience-muted">🔇</span>' : ''}
+      </div>
+    `).join('') + (participants.length > shown.length ? `<div class="live-audience-more">+${participants.length - shown.length}</div>` : '');
+
+    const countEl = document.getElementById('live-audience-count');
+    if (countEl) countEl.textContent = participants.length;
+
+    const caption = document.getElementById('live-audience-caption');
+    if (caption) {
+      if (!participants.length) {
+        caption.textContent = 'No one here yet';
+      } else {
+        const names = participants.slice(0, 2).map(p => p.userId === user?.id ? 'You' : (p.name || '').split(' ')[0]);
+        const extra = participants.length - names.length;
+        caption.textContent = extra > 0 ? `${names.join(', ')} and ${extra} others are listening` : `${names.join(', ')} ${names.length > 1 ? 'are' : 'is'} listening`;
+      }
+    }
   },
 
   _renderParticipantList() {
@@ -590,6 +635,29 @@ const VoiceRoomLive = {
   },
 
   _bindControls() {
+    const moreBtn = document.getElementById('live-more-btn');
+    const moreMenu = document.getElementById('live-more-menu');
+    if (moreBtn && moreMenu) {
+      moreBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const open = moreMenu.hidden;
+        moreMenu.hidden = !open;
+        moreBtn.setAttribute('aria-expanded', String(open));
+      });
+      moreMenu.querySelectorAll('button').forEach(btn => {
+        btn.addEventListener('click', () => {
+          moreMenu.hidden = true;
+          moreBtn.setAttribute('aria-expanded', 'false');
+        });
+      });
+      document.addEventListener('click', (e) => {
+        if (!moreMenu.hidden && !moreMenu.contains(e.target) && e.target !== moreBtn && !moreBtn.contains(e.target)) {
+          moreMenu.hidden = true;
+          moreBtn.setAttribute('aria-expanded', 'false');
+        }
+      });
+    }
+
     document.getElementById('live-mic-btn')?.addEventListener('click', () => this.toggleMic());
     document.getElementById('live-checkin-btn')?.addEventListener('click', () => this._checkIn());
     document.getElementById('live-leave-seat-btn')?.addEventListener('click', () => this._leaveSeat());
@@ -864,19 +932,44 @@ const VoiceRoomLive = {
   async _renderDonations() {
     const box = document.getElementById('live-donations-list');
     if (!box || !this.roomMeta?.eventId) return;
-    const donations = SupabaseClient.isEnabled()
-      ? await API.fetchSessionDonations(this.roomMeta.eventId, 10)
-      : [];
-    if (!donations.length) {
+    let supporters = [];
+    try {
+      supporters = SupabaseClient.isEnabled()
+        ? await API.fetchSessionTopSupporters(this.roomMeta.eventId, 5)
+        : [];
+    } catch (err) {
+      console.error('fetchSessionTopSupporters failed:', err);
+      box.innerHTML = '<p class="empty-hint">Couldn\'t load supporters</p>';
+      return;
+    }
+    if (!supporters.length) {
       box.innerHTML = '<p class="empty-hint">No gifts yet — be the first!</p>';
       return;
     }
-    box.innerHTML = donations.map(d => `
-      <div class="live-donation-item">
-        <strong>${this._escape(d.sender_name)}</strong>
-        <span>${d.gift_type === 'star' ? '⭐' : d.gift_type === 'gift' ? '🎁' : '🪙'} ${d.amount}</span>
+    box.innerHTML = supporters.map((s, i) => `
+      <div class="live-supporter-item">
+        <span class="live-supporter-rank">${i + 1}</span>
+        ${avatarImg(s.name, 'live-supporter-avatar', s.name)}
+        <span class="live-supporter-name">${this._escape(s.name)}</span>
+        <span class="live-supporter-amount">🪙 ${s.total}</span>
       </div>
     `).join('');
+  },
+
+  _renderEventDetails() {
+    const box = document.getElementById('live-event-details');
+    if (!box) return;
+    const meta = this.roomMeta || {};
+    box.innerHTML = `
+      ${meta.date || meta.time ? `
+        <div class="live-event-detail-row">${Components.icon('clock')}<span><strong>${this._escape(meta.date || '')}</strong>${meta.time ? ` · ${this._escape(meta.time)}` : ''}</span></div>
+      ` : ''}
+      <div class="live-event-detail-row">${Components.icon('events')}<span>Mushaira Event</span></div>
+      <div class="live-event-detail-row">
+        ${avatarImg(meta.host, 'live-event-host-avatar', meta.host)}
+        <span>Hosted by <strong>${this._escape(meta.host || '')}</strong></span>
+      </div>
+    `;
   },
 
   async _renderHandRequests() {
@@ -1251,8 +1344,10 @@ const VoiceRoomLive = {
 
 function renderLiveRoomView(meta) {
   const maxSeats = meta.maxSeats || LIVE_ROOM.MUSHAIRA_SEATS;
+  const isMushaira = meta.roomType === 'mushaira';
+  const tags = Array.isArray(meta.tags) ? meta.tags : [];
 
-  return `
+  const inner = `
     <div class="live-room-page live-room-v2"
       data-room-key="${meta.roomKey || ''}"
       data-room-title="${(meta.title || '').replace(/"/g, '&quot;')}"
@@ -1263,7 +1358,10 @@ function renderLiveRoomView(meta) {
       data-event-id="${meta.eventId || ''}"
       data-session-status="${meta.sessionStatus || 'live'}"
       data-max-seats="${maxSeats}"
-      data-leave-path="${meta.leavePath || '/voice-rooms'}">
+      data-leave-path="${meta.leavePath || '/voice-rooms'}"
+      data-tags="${tags.join('|').replace(/"/g, '&quot;')}"
+      data-date="${(meta.date || '').replace(/"/g, '&quot;')}"
+      data-time="${(meta.time || '').replace(/"/g, '&quot;')}">
 
       <header class="live-v2-header">
         <a href="${meta.backPath || '#/voice-rooms'}" class="live-v2-back" aria-label="Back">${Components.icon('back')}</a>
@@ -1273,6 +1371,7 @@ function renderLiveRoomView(meta) {
             <span class="live-v2-badge">LIVE</span>
           </div>
           <p class="live-v2-host">Host · ${meta.host}</p>
+          ${tags.length ? `<div class="live-v2-tags">${tags.map(t => `<span class="live-v2-tag">${t}</span>`).join('')}</div>` : ''}
         </div>
         <div class="live-v2-stats">
           <span class="live-v2-stat"><strong id="live-room-count">0</strong> online</span>
@@ -1315,16 +1414,34 @@ function renderLiveRoomView(meta) {
           <div class="live-room-slots live-v2-slots" id="live-room-slots"></div>
 
           <div id="live-now-speaking" class="live-now-speaking" hidden></div>
+
+          ${isMushaira ? `
+          <div class="live-v2-audience">
+            <div class="live-v2-audience-head">
+              <h3><span class="live-v2-audience-dot"></span> Audience</h3>
+              <span class="live-v2-audience-cap" id="live-audience-count">0</span>
+            </div>
+            <div id="live-audience-strip" class="live-audience-strip"></div>
+            <p id="live-audience-caption" class="live-audience-caption"></p>
+          </div>
+          ` : ''}
         </section>
 
         <aside class="live-v2-sidebar">
+          ${isMushaira ? `
+          <section id="live-host-participants" class="live-v2-participants-card" hidden>
+            <h3>Manage Speakers</h3>
+            <div id="live-participants-list" class="live-participants-list"></div>
+          </section>
+          ` : `
           <section class="live-v2-participants-card">
             <h3>Participants</h3>
             <div id="live-participants-list" class="live-participants-list"></div>
           </section>
+          `}
           <section class="live-v2-chat-card">
             <div class="live-room-chat-header">
-              <span>Chat</span>
+              <span>${isMushaira ? 'Live Chat' : 'Chat'}</span>
               <button type="button" class="live-chat-toggle-btn" id="live-chat-toggle">−</button>
             </div>
             <div class="live-room-messages" id="live-room-messages"></div>
@@ -1333,16 +1450,54 @@ function renderLiveRoomView(meta) {
               <button type="submit" class="btn btn-gold btn-sm">Send</button>
             </form>
           </section>
-          ${meta.roomType === 'mushaira' ? `
+          ${isMushaira ? `
           <section class="live-v2-donations-card">
-            <h3>Top Gifts</h3>
+            <h3>Top Supporters</h3>
             <div id="live-donations-list"><p class="empty-hint">Loading…</p></div>
+          </section>
+          <section class="live-v2-details-card">
+            <h3>Event Details</h3>
+            <div id="live-event-details"></div>
           </section>
           ` : ''}
         </aside>
       </div>
 
       <nav class="live-dock" aria-label="Room controls">
+        ${isMushaira ? `
+        <button type="button" class="live-dock-btn live-dock-mic-sm" id="live-mic-btn">
+          <span class="mic-icon live-dock-icon">🎤</span>
+          <span class="mic-label live-dock-label">Mic Off</span>
+        </button>
+        <button type="button" class="live-dock-btn" id="live-raise-hand-btn">
+          <span class="live-dock-icon">✋</span>
+          <span class="live-dock-label">Raise Hand</span>
+        </button>
+        <button type="button" class="live-dock-btn live-dock-cta" id="live-checkin-btn">
+          <span class="live-dock-icon">🎙️</span>
+          <span class="live-dock-label">Request to Speak</span>
+        </button>
+        <button type="button" class="live-dock-btn" id="live-react-btn">
+          <span class="live-dock-icon">❤️</span>
+          <span class="live-dock-label">React</span>
+        </button>
+        <div class="live-dock-more-wrap">
+          <button type="button" class="live-dock-btn" id="live-more-btn" aria-haspopup="true" aria-expanded="false">
+            <span class="live-dock-icon">⋯</span>
+            <span class="live-dock-label">More</span>
+          </button>
+          <div class="live-dock-more-menu" id="live-more-menu" hidden>
+            <button type="button" id="live-share-btn">${Components.icon('share')} Share Room</button>
+            <button type="button" id="live-donate-btn">🎁 Send Gift</button>
+            <button type="button" id="live-leave-seat-btn">↩ Leave Seat</button>
+            <button type="button" class="danger" id="live-leave-btn">✕ Exit Room</button>
+          </div>
+        </div>
+        <button type="button" class="live-dock-btn live-dock-chat-mobile" id="live-chat-toggle-mobile" aria-label="Chat">
+          <span class="live-dock-icon">💬</span>
+          <span class="live-dock-label">Chat</span>
+        </button>
+        ` : `
         <button type="button" class="live-dock-btn" id="live-checkin-btn">
           <span class="live-dock-icon">💺</span>
           <span class="live-dock-label">Book Seat</span>
@@ -1363,12 +1518,6 @@ function renderLiveRoomView(meta) {
           <span class="live-dock-icon">↗</span>
           <span class="live-dock-label">Share</span>
         </button>
-        ${meta.roomType === 'mushaira' ? `
-        <button type="button" class="live-dock-btn" id="live-donate-btn">
-          <span class="live-dock-icon">🎁</span>
-          <span class="live-dock-label">Gift</span>
-        </button>
-        ` : ''}
         <button type="button" class="live-dock-btn" id="live-leave-seat-btn">
           <span class="live-dock-icon">↩</span>
           <span class="live-dock-label">Leave</span>
@@ -1381,7 +1530,17 @@ function renderLiveRoomView(meta) {
           <span class="live-dock-icon">💬</span>
           <span class="live-dock-label">Chat</span>
         </button>
+        `}
       </nav>
+    </div>
+  `;
+
+  if (!isMushaira) return inner;
+
+  return `
+    <div class="live-mushaira-shell">
+      ${Components.renderSidebar()}
+      ${inner}
     </div>
   `;
 }

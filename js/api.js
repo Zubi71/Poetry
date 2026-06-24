@@ -1101,6 +1101,23 @@ const API = {
     return data || [];
   },
 
+  async fetchSessionTopSupporters(sessionId, limit = 5) {
+    const sb = SupabaseClient.get();
+    if (!sb) return [];
+    const { data } = await sb.from('session_donations')
+      .select('sender_id, sender_name, amount')
+      .eq('session_id', parseInt(sessionId, 10))
+      .limit(500);
+    const totals = new Map();
+    (data || []).forEach(d => {
+      const key = d.sender_id || d.sender_name;
+      const entry = totals.get(key) || { name: d.sender_name, total: 0 };
+      entry.total += d.amount || 0;
+      totals.set(key, entry);
+    });
+    return [...totals.values()].sort((a, b) => b.total - a.total).slice(0, limit);
+  },
+
   async setSessionReminders(sessionId, eventDate, eventTime) {
     const sb = SupabaseClient.get();
     const user = Auth.getCurrentUser();
