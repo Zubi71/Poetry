@@ -1,0 +1,16 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Scroll containers inside the React room/listing trees only — scoped by
+   id so this never affects the vanilla site's global scrollbar styling. */
+#mushaira-room-root ::-webkit-scrollbar,
+#mushaira-listing-root ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+#mushaira-room-root ::-webkit-scrollbar-thumb,
+#mushaira-listing-root ::-webkit-scrollbar-thumb {
+  background: rgba(212, 175, 55, 0.4);
+  border-radius: 999px;
+}

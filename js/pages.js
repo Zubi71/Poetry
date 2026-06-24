@@ -323,45 +323,13 @@ const Pages = {
   },
 
   mushaira(params, query) {
-    const tab = query.tab || 'live';
-    const user = Auth.getCurrentUser();
-    const unread = Storage.getNotifications().filter(n => !n.read).length;
-
+    // Premium React listing UI (header, tabs, search, cards, create FAB) owns
+    // this route's markup now — see src/mushaira-room/ListingApp.tsx, mounted
+    // via app.js's bindEvents(). It reads tab/filter/search straight from the
+    // URL hash itself, so no data-* handoff is needed here.
     const content = `
-      <div class="mushaira-v2">
-        <header class="mushaira-v2-header">
-          <div class="mushaira-v2-brand">
-            <span class="mushaira-v2-logo">${Components.icon('voice')}</span>
-            <div>
-              <h1>Live Mushaira</h1>
-              <p class="mushaira-v2-tagline urdu-text">شبوں کی محفل، دلوں کا سنگم</p>
-            </div>
-          </div>
-          <div class="mushaira-v2-header-actions">
-            <a href="#/poems" class="mushaira-v2-icon-btn" aria-label="Search">${Components.icon('search')}</a>
-            <a href="#/notifications" class="mushaira-v2-icon-btn mushaira-v2-notif" aria-label="Notifications">
-              ${Components.icon('bell')}
-              ${unread ? `<span class="mushaira-v2-badge">${unread > 9 ? '9+' : unread}</span>` : ''}
-            </a>
-            <a href="#/dashboard" class="mushaira-v2-avatar-link">${avatarImg(user.name, 'mushaira-v2-avatar', user.name, user.avatar)}</a>
-          </div>
-        </header>
-
-        <nav class="mushaira-v2-tabs" aria-label="Mushaira sections">
-          <a href="#/mushaira?tab=live" class="mushaira-v2-tab ${tab === 'live' ? 'active' : ''}">Live Now</a>
-          <a href="#/mushaira?tab=schedule" class="mushaira-v2-tab ${tab === 'schedule' ? 'active' : ''}">Schedule</a>
-          <a href="#/mushaira?tab=ended" class="mushaira-v2-tab ${tab === 'ended' ? 'active' : ''}">Ended</a>
-        </nav>
-
-        <div class="mushaira-v2-search-wrap">
-          <input type="search" id="mushaira-search-input" class="mushaira-v2-search" placeholder="Search poet, title, category…" value="${query.q || ''}" aria-label="Search mushaira">
-        </div>
-
-        <div id="mushaira-events-root" data-tab="${tab}" data-schedule-filter="${query.filter || 'all'}" data-ended-filter="${query.efilter || 'all'}" data-search="${query.q || ''}">
-          <p class="loading-inline">Loading events...</p>
-        </div>
-
-        <button type="button" class="mushaira-v2-create create-mushaira-btn" aria-label="Create event">+</button>
+      <div id="mushaira-listing-root">
+        <p class="loading-inline">Loading events...</p>
       </div>
     `;
     return Components.renderAppLayout(content, { noSidebar: true });

@@ -1,7 +1,23 @@
 {
   "name": "urdu-poetry-website",
   "private": true,
+  "scripts": {
+    "dev:mushaira-room": "vite --config vite.mushaira.config.ts",
+    "build:mushaira-room": "vite build --config vite.mushaira.config.ts",
+    "watch:mushaira-room": "vite build --config vite.mushaira.config.ts --watch"
+  },
   "dependencies": {
-    "livekit-server-sdk": "^2.9.2"
+    "livekit-server-sdk": "^2.9.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "framer-motion": "^11.11.17"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.7.2",
+    "vite": "^5.4.11"
   }
 }

@@ -98,6 +98,14 @@ const Router = {
 
     const path = this.getCurrentPath();
     const query = this.getQuery();
+
+    // app.innerHTML replacement below blows away any mounted React root's
+    // container without calling unmount — always tear it down first,
+    // including same-route/different-id jumps (e.g. room A -> room B via a
+    // "Join Live" link) that the prefix-based VoiceRoomLive exemption below
+    // doesn't catch.
+    window.MushairaRoomBridge?.unmount?.();
+
     if (!path.startsWith('/voice-rooms/') && !path.startsWith('/mushaira/live/') && !path.startsWith('/mushaira/session/')) VoiceRoomLive?.destroy?.();
     if (!path.startsWith('/voice-rooms/') && !path.startsWith('/mushaira/live/')) App._stopMic?.();
     const match = this.matchRoute(path);

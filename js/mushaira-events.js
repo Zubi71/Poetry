@@ -850,7 +850,13 @@ const MushairaEvents = {
       return;
     }
 
-    mount.outerHTML = renderLiveRoomView({
+    // Premium React room UI owns this route's markup now (VoiceRoomLive's
+    // imperative DOM render methods become safe no-ops here since none of
+    // the element ids they target exist in this mount — see RoomApp.tsx,
+    // which calls VoiceRoomLive.init(meta) itself in a mount effect).
+    mount.id = 'mushaira-room-root';
+    mount.innerHTML = '';
+    window.MushairaRoomBridge?.mountRoom(mount, {
       roomKey: `mushaira-${event.id}`,
       roomId: `M-${event.id}`,
       title: event.title,
@@ -866,25 +872,6 @@ const MushairaEvents = {
       date: event.date,
       time: event.time
     });
-
-    const liveRoom = document.querySelector('.live-room-page');
-    if (liveRoom && typeof VoiceRoomLive !== 'undefined') {
-      VoiceRoomLive.init({
-        roomKey: liveRoom.dataset.roomKey,
-        roomId: liveRoom.dataset.roomId,
-        title: liveRoom.dataset.roomTitle,
-        host: liveRoom.dataset.roomHost,
-        hostOwnerId: liveRoom.dataset.hostOwnerId || null,
-        eventId: parseInt(liveRoom.dataset.eventId, 10) || event.id,
-        roomType: liveRoom.dataset.roomType || 'mushaira',
-        sessionStatus: liveRoom.dataset.sessionStatus || 'live',
-        maxSeats: parseInt(liveRoom.dataset.maxSeats, 10) || LIVE_ROOM.MUSHAIRA_SEATS,
-        leavePath: liveRoom.dataset.leavePath || '/mushaira',
-        tags: liveRoom.dataset.tags ? liveRoom.dataset.tags.split('|') : [],
-        date: liveRoom.dataset.date || '',
-        time: liveRoom.dataset.time || ''
-      });
-    }
   },
 
   async initPage() {

@@ -809,8 +809,9 @@ const App = {
       MushairaEvents.initLivePage(mushairaMount.dataset.eventId);
     }
 
-    if (document.getElementById('mushaira-events-root') && typeof MushairaEvents !== 'undefined') {
-      MushairaEvents.initPage();
+    const listingMount = document.getElementById('mushaira-listing-root');
+    if (listingMount) {
+      window.MushairaRoomBridge?.mountListing(listingMount);
     }
 
     if (document.querySelector('.session-details-page') && typeof MushairaEvents !== 'undefined') {

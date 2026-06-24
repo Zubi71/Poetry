@@ -37,6 +37,46 @@ const VoiceRoomLive = {
       : LIVE_ROOM.VOICE_ROOM_SEATS;
   },
 
+  /* ===== Pub/sub snapshot bridge — lets the React room UI read state via
+     useSyncExternalStore without this singleton knowing React exists. */
+  _listeners: new Set(),
+  _snapshot: null,
+
+  subscribe(fn) {
+    this._listeners.add(fn);
+    return () => this._listeners.delete(fn);
+  },
+
+  getSnapshot() {
+    return this._snapshot || (this._snapshot = this._computeSnapshot());
+  },
+
+  _emit() {
+    this._snapshot = this._computeSnapshot();
+    this._listeners.forEach(fn => fn(this._snapshot));
+  },
+
+  _computeSnapshot() {
+    const participants = this._getAllParticipants();
+    return {
+      participants,
+      speakers: participants.filter(p => p.slot),
+      audience: participants.filter(p => !p.slot),
+      nowSpeaking: participants.find(p => p.isSpeaking && this._isAudible(p)) || null,
+      chatMessages: [...this.chatMessages],
+      handRequests: [...this._handRequests],
+      micOn: this.micOn,
+      mutedByHost: this.mutedByHost,
+      canSpeak: this.canSpeak,
+      isSpeaking: this.isSpeaking,
+      mySlot: this.mySlot,
+      isHost: this._isHost(),
+      maxSlots: this.maxSlots,
+      paused: this._paused,
+      roomMeta: this.roomMeta
+    };
+  },
+
   async init(meta) {
     this.destroy();
     this.roomKey = meta.roomKey;
@@ -89,6 +129,7 @@ const VoiceRoomLive = {
     if (this._isHost() && this.roomMeta?.eventId) {
       this._handPollTimer = setInterval(() => this._renderHandRequests(), 5000);
     }
+    this._emit();
   },
 
   _safe(fn) {
@@ -144,7 +185,7 @@ const VoiceRoomLive = {
 
   _isHost() {
     const user = Auth.getCurrentUser();
-    if (!user) return false;
+    if (!user || !this.roomMeta) return false;
     if (this.roomMeta.hostOwnerId && user.id === this.roomMeta.hostOwnerId) return true;
     return this.roomMeta.host === user.name;
   },
@@ -186,6 +227,7 @@ const VoiceRoomLive = {
       this._renderParticipantList();
       this._updateParticipantCount();
       this._updateSeatStats();
+      this._emit();
     };
 
     this.channel
@@ -270,6 +312,7 @@ const VoiceRoomLive = {
     this._renderChat();
     this._updateParticipantCount();
     this._updateSeatStats();
+    this._emit();
   },
 
   _applyLocalUsers(users) {
@@ -479,6 +522,7 @@ const VoiceRoomLive = {
     this._updateHostPanelVisibility();
     this._renderNowSpeaking();
     this._renderAudienceStrip();
+    this._emit();
   },
 
   _renderAudienceStrip() {
@@ -542,6 +586,7 @@ const VoiceRoomLive = {
     list.querySelectorAll('.host-action-btn').forEach(b => {
       b.onclick = () => this._hostAction(b.dataset.action, b.dataset.userId);
     });
+    this._emit();
   },
 
   _renderNowSpeaking() {
@@ -940,10 +985,12 @@ const VoiceRoomLive = {
     } catch (err) {
       console.error('fetchSessionTopSupporters failed:', err);
       box.innerHTML = '<p class="empty-hint">Couldn\'t load supporters</p>';
+      this._emit();
       return;
     }
     if (!supporters.length) {
       box.innerHTML = '<p class="empty-hint">No gifts yet — be the first!</p>';
+      this._emit();
       return;
     }
     box.innerHTML = supporters.map((s, i) => `
@@ -954,6 +1001,7 @@ const VoiceRoomLive = {
         <span class="live-supporter-amount">🪙 ${s.total}</span>
       </div>
     `).join('');
+    this._emit();
   },
 
   _renderEventDetails() {
@@ -1009,6 +1057,7 @@ const VoiceRoomLive = {
         this._renderHandRequests();
       };
     });
+    this._emit();
   },
 
   async _startLiveSession() {
@@ -1228,6 +1277,7 @@ const VoiceRoomLive = {
     if (!canSpeak && this.micOn) await this._stopMicTracks();
     await this._updateMySlot(this.mySlot);
     this._updateMicUI();
+    this._emit();
   },
 
   async _forceRemove() {
@@ -1328,6 +1378,7 @@ const VoiceRoomLive = {
       };
     });
     box.scrollTop = box.scrollHeight;
+    this._emit();
   },
 
   _updateParticipantCount() {
@@ -1339,6 +1390,78 @@ const VoiceRoomLive = {
     const d = document.createElement('div');
     d.textContent = text || '';
     return d.innerHTML;
+  },
+
+  /* ===== Public action surface for the React room UI (additive only —
+     thin aliases/composites over the methods above; no existing behavior
+     changed). The vanilla renderLiveRoomView() DOM/button wiring above
+     keeps working untouched for the /voice-rooms/:id route. */
+  checkIn() { return this._checkIn(); },
+  leaveSeat() { return this._leaveSeat(); },
+  pickSeat(slot) { return this._handleSlotClick(slot); },
+  hostAction(action, targetUserId) { return this._hostAction(action, targetUserId); },
+  confirmEndEvent() { return this._confirmEndMushairaEvent(); },
+  endEvent() { return this._performEndMushairaEvent(); },
+  togglePause() { return this._togglePauseLive(); },
+  startLiveSession() { return this._startLiveSession(); },
+  leaveRoom() { this.destroy(); },
+
+  async pinChatMessage(dbId, pinned) {
+    await API.pinSessionComment(dbId, pinned);
+    const msg = this.chatMessages.find(x => String(x.dbId) === String(dbId));
+    if (msg) msg.pinned = pinned;
+    this._renderChat();
+  },
+
+  async deleteChatMessage(dbId) {
+    await API.deleteSessionComment(dbId);
+    this.chatMessages = this.chatMessages.filter(x => String(x.dbId) !== String(dbId));
+    this._renderChat();
+  },
+
+  async raiseHand() {
+    if (this.roomMeta?.eventId && SupabaseClient.isEnabled()) {
+      await API.requestToSpeak(this.roomMeta.eventId);
+      if (this._isHost()) this._renderHandRequests();
+    }
+    this._appendSystemMessage(`${Auth.getCurrentUser()?.name || 'Someone'} raised their hand to speak`);
+    this.sendChat('✋ Request to speak');
+  },
+
+  async sendReaction(emoji) {
+    if (this.roomMeta?.eventId && SupabaseClient.isEnabled() && ['❤️', '👏', '🔥'].includes(emoji)) {
+      await API.postSessionReaction(this.roomMeta.eventId, emoji);
+    }
+    this.sendChat(emoji);
+  },
+
+  async approveHandRequest(requestId, userId) {
+    await API.resolveSpeakerRequest(requestId, true);
+    this._hostAction('grant_speak', userId);
+    this._renderHandRequests();
+  },
+
+  async denyHandRequest(requestId) {
+    await API.resolveSpeakerRequest(requestId, false);
+    this._renderHandRequests();
+  },
+
+  async sendDonation(amount, giftType) {
+    const eventId = this.roomMeta?.eventId;
+    if (!eventId) return;
+    const user = Auth.getCurrentUser();
+    if (SupabaseClient.isEnabled()) {
+      await API.postSessionDonation(eventId, { amount, giftType, senderName: user?.name });
+    }
+    this._appendSystemMessage(`${user?.name || 'Someone'} sent a ${giftType}!`);
+    this._renderDonations();
+    Storage.addNotification({ type: 'gift', text: `You received a gift in ${this.roomMeta.title}` });
+  },
+
+  shareRoom() {
+    const url = location.href;
+    if (navigator.share) return navigator.share({ title: this.roomMeta?.title || 'Live Mushaira', url }).catch(() => {});
+    return navigator.clipboard.writeText(url);
   }
 };
 
