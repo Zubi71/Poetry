@@ -88,6 +88,7 @@ export function RoomApp({ meta }: { meta: RoomMeta }) {
         canSpeak={store.canSpeak}
         hasSeat={!!store.mySlot}
         isHost={store.isHost}
+        handRaised={store.handRaised}
         paused={store.paused}
         onToggleMic={() => store.actions.toggleMic()}
         onRaiseHand={() => store.actions.raiseHand()}
@@ -114,7 +115,7 @@ export function RoomApp({ meta }: { meta: RoomMeta }) {
         handRequests={store.handRequests}
         onHostAction={(action, userId) => store.actions.hostAction(action, userId)}
         onApproveHand={(id, userId) => store.actions.approveHandRequest(id, userId)}
-        onDenyHand={(id) => store.actions.denyHandRequest(id)}
+        onDenyHand={(id, userId) => store.actions.denyHandRequest(id, userId)}
         onConfirmEndEvent={() => store.actions.confirmEndEvent()}
       />
 

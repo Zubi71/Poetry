@@ -20,7 +20,7 @@ export function ModeratorPanel({
   handRequests: HandRequest[];
   onHostAction: (action: string, userId: string) => void;
   onApproveHand: (requestId: string | number, userId: string) => void;
-  onDenyHand: (requestId: string | number) => void;
+  onDenyHand: (requestId: string | number, userId: string) => void;
   onConfirmEndEvent: () => void;
 }) {
   // "Disable comments" has no backend flag yet (no comments_disabled column) —
@@ -42,7 +42,7 @@ export function ModeratorPanel({
                   <button onClick={() => onApproveHand(r.id, r.user_id)} className="mr-rounded-full mr-bg-mr-gold-gradient mr-px-3 mr-py-1 mr-text-xs mr-font-semibold mr-text-black">
                     Approve
                   </button>
-                  <button onClick={() => onDenyHand(r.id)} className="mr-rounded-full mr-bg-white/10 mr-px-3 mr-py-1 mr-text-xs mr-text-white">
+                  <button onClick={() => onDenyHand(r.id, r.user_id)} className="mr-rounded-full mr-bg-white/10 mr-px-3 mr-py-1 mr-text-xs mr-text-white">
                     Deny
                   </button>
                 </div>
@@ -68,10 +68,10 @@ export function ModeratorPanel({
                 </button>
                 {!p.slot && (
                   <button
-                    onClick={() => onHostAction('grant_speak', p.userId)}
+                    onClick={() => onHostAction('seat_speaker', p.userId)}
                     className="mr-rounded-full mr-bg-mr-purple/40 mr-px-2.5 mr-py-1 mr-text-[11px] mr-text-white"
                   >
-                    Promote
+                    Add to Stage
                   </button>
                 )}
                 <button

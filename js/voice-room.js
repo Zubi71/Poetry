@@ -29,6 +29,7 @@ const VoiceRoomLive = {
   _paused: false,
   _sessionCommentsChannel: null,
   _handRequests: [],
+  _handRaised: false,
 
   get maxSlots() {
     if (this.roomMeta?.maxSeats) return this.roomMeta.maxSeats;
@@ -65,6 +66,7 @@ const VoiceRoomLive = {
       nowSpeaking: participants.find(p => p.isSpeaking && this._isAudible(p)) || null,
       chatMessages: [...this.chatMessages],
       handRequests: [...this._handRequests],
+      handRaised: this._handRaised,
       micOn: this.micOn,
       mutedByHost: this.mutedByHost,
       canSpeak: this.canSpeak,
@@ -85,6 +87,7 @@ const VoiceRoomLive = {
     this.mutedByHost = false;
     this.canSpeak = true;
     this.isSpeaking = false;
+    this._handRaised = false;
 
     if (Auth.isGuest()) {
       Components.showToast('Please sign in to join voice rooms', 'error');
@@ -120,6 +123,13 @@ const VoiceRoomLive = {
       await this._connectLiveKit();
     } else {
       this._initLocalFallback();
+    }
+
+    // The host created/owns this event, so they always start seated as a
+    // speaker — everyone else (including a host re-joining without a slot
+    // for some reason) starts in the audience until the host promotes them.
+    if (this._isHost() && !this.mySlot) {
+      await this._assignNextFreeSlot(true);
     }
 
     this._appendSystemMessage(
@@ -637,13 +647,21 @@ const VoiceRoomLive = {
     const user = Auth.getCurrentUser();
     const occupant = this._getParticipantInSlot(slot);
 
-    if (occupant && occupant.userId !== user.id) {
+    if (occupant && occupant.userId === user.id) {
+      await this.toggleMic();
+      return;
+    }
+
+    if (occupant) {
       Components.showToast(`${occupant.name} is on seat ${slot}`, 'error');
       return;
     }
 
-    if (occupant && occupant.userId === user.id) {
-      await this.toggleMic();
+    // Claiming a brand-new seat (going from audience to speaker) is a host
+    // decision — only the host can self-serve here. A speaker who already
+    // has a seat is free to move to a different empty one.
+    if (!this.mySlot && !this._isHost()) {
+      Components.showToast('Raise your hand — the host will invite you to speak', 'error');
       return;
     }
 
@@ -660,17 +678,29 @@ const VoiceRoomLive = {
       Components.showToast(`Already checked in at seat ${this.mySlot}`);
       return;
     }
+    if (!this._isHost()) {
+      Components.showToast('Raise your hand — the host will invite you to speak', 'error');
+      return;
+    }
+    await this._assignNextFreeSlot();
+  },
+
+  // Shared by self check-in (host only) and host-approved seating of an
+  // audience member — unlike _checkIn()/_handleSlotClick(), this has no
+  // permission gate of its own, since the caller is responsible for that.
+  async _assignNextFreeSlot(silent = false) {
     for (let s = 1; s <= this.maxSlots; s++) {
       if (!this._getParticipantInSlot(s)) {
         this.mySlot = s;
         await this._updateMySlot(s);
         this._renderSlots();
         this._renderParticipantList();
-        Components.showToast(`Checked in — seat ${s} reserved`);
-        return;
+        if (!silent) Components.showToast(`Checked in — seat ${s} reserved`);
+        return s;
       }
     }
-    Components.showToast('All 20 seats are full', 'error');
+    if (!silent) Components.showToast(`All ${this.maxSlots} seats are full`, 'error');
+    return null;
   },
 
   async _updateMySlot(slot) {
@@ -733,15 +763,7 @@ const VoiceRoomLive = {
     document.getElementById('live-end-event-btn')?.addEventListener('click', () => this._confirmEndMushairaEvent());
     document.getElementById('live-pause-btn')?.addEventListener('click', () => this._togglePauseLive());
 
-    document.getElementById('live-raise-hand-btn')?.addEventListener('click', async () => {
-      if (this.roomMeta?.eventId && SupabaseClient.isEnabled()) {
-        await API.requestToSpeak(this.roomMeta.eventId);
-        if (this._isHost()) this._renderHandRequests();
-      }
-      this._appendSystemMessage(`${Auth.getCurrentUser()?.name || 'Someone'} raised their hand to speak`);
-      this.sendChat('✋ Request to speak');
-      Components.showToast('Hand raised — host will review your request');
-    });
+    document.getElementById('live-raise-hand-btn')?.addEventListener('click', () => this.raiseHand());
 
     document.getElementById('live-react-btn')?.addEventListener('click', () => {
       Components.showModal('Send Reaction', `
@@ -1081,20 +1103,21 @@ const VoiceRoomLive = {
       <div class="live-hand-request-item">
         <span>${this._escape(r.display_name)}</span>
         <button type="button" class="btn btn-gold btn-sm approve-hand-btn" data-request-id="${r.id}" data-user-id="${r.user_id}">Approve</button>
-        <button type="button" class="btn btn-ghost btn-sm deny-hand-btn" data-request-id="${r.id}">Deny</button>
+        <button type="button" class="btn btn-ghost btn-sm deny-hand-btn" data-request-id="${r.id}" data-user-id="${r.user_id}">Deny</button>
       </div>
     `).join('');
     list.querySelectorAll('.approve-hand-btn').forEach(btn => {
       btn.onclick = async () => {
         await API.resolveSpeakerRequest(btn.dataset.requestId, true);
-        this._hostAction('grant_speak', btn.dataset.userId);
+        this._hostAction('seat_speaker', btn.dataset.userId);
         this._renderHandRequests();
-        Components.showToast('Speaker approved');
+        Components.showToast('Speaker approved — they are now on stage');
       };
     });
     list.querySelectorAll('.deny-hand-btn').forEach(btn => {
       btn.onclick = async () => {
         await API.resolveSpeakerRequest(btn.dataset.requestId, false);
+        this._hostAction('deny_speak', btn.dataset.userId);
         this._renderHandRequests();
       };
     });
@@ -1191,6 +1214,23 @@ const VoiceRoomLive = {
       case 'grant_speak':
         if (isTarget) await this._applySpeakPermission(true);
         if (isHost || fromSelf) this._appendSystemMessage(`${payload.targetName || 'User'} can speak now`);
+        break;
+      case 'seat_speaker':
+        if (isTarget) {
+          this._handRaised = false;
+          this.canSpeak = true;
+          if (!this.mySlot) await this._assignNextFreeSlot(true);
+          else await this._updateMySlot(this.mySlot);
+          this._emit();
+        }
+        if (isHost || fromSelf) this._appendSystemMessage(`${payload.targetName || 'User'} is now on stage`);
+        break;
+      case 'deny_speak':
+        if (isTarget) {
+          this._handRaised = false;
+          this._emit();
+        }
+        if (isHost || fromSelf) this._appendSystemMessage(`${payload.targetName || 'User'}'s request to speak was declined`);
         break;
       case 'remove':
         if (isTarget) {
@@ -1462,12 +1502,23 @@ const VoiceRoomLive = {
   },
 
   async raiseHand() {
+    if (this._isHost() || this.mySlot) {
+      Components.showToast("You're already on stage");
+      return;
+    }
+    if (this._handRaised) {
+      Components.showToast('Hand already raised — waiting for host');
+      return;
+    }
+    this._handRaised = true;
+    this._emit();
     if (this.roomMeta?.eventId && SupabaseClient.isEnabled()) {
       await API.requestToSpeak(this.roomMeta.eventId);
       if (this._isHost()) this._renderHandRequests();
     }
     this._appendSystemMessage(`${Auth.getCurrentUser()?.name || 'Someone'} raised their hand to speak`);
     this.sendChat('✋ Request to speak');
+    Components.showToast('Hand raised — the host will invite you to speak');
   },
 
   async sendReaction(emoji) {
@@ -1479,12 +1530,13 @@ const VoiceRoomLive = {
 
   async approveHandRequest(requestId, userId) {
     await API.resolveSpeakerRequest(requestId, true);
-    this._hostAction('grant_speak', userId);
+    this._hostAction('seat_speaker', userId);
     this._renderHandRequests();
   },
 
-  async denyHandRequest(requestId) {
+  async denyHandRequest(requestId, userId) {
     await API.resolveSpeakerRequest(requestId, false);
+    if (userId) this._hostAction('deny_speak', userId);
     this._renderHandRequests();
   },
 

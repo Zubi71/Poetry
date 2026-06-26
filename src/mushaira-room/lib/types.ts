@@ -52,6 +52,7 @@ export interface RoomSnapshot {
   nowSpeaking: Participant | null;
   chatMessages: ChatMessage[];
   handRequests: HandRequest[];
+  handRaised: boolean;
   micOn: boolean;
   mutedByHost: boolean;
   canSpeak: boolean;
