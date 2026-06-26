@@ -1306,12 +1306,14 @@ const VoiceRoomLive = {
     }
 
     let ended = true;
+    let failReason = null;
     if (SupabaseClient.isEnabled()) {
       const result = await API.endMushairaSession(eventId);
-      ended = !!result;
-      if (result) {
+      ended = !!result?.ok;
+      failReason = result?.reason;
+      if (ended) {
         const list = (window.REMOTE_MUSHAIRA_EVENTS || []).map(e =>
-          e.id === parseInt(eventId, 10) ? result : e
+          e.id === parseInt(eventId, 10) ? result.event : e
         );
         window.REMOTE_MUSHAIRA_EVENTS = list;
       }
@@ -1320,7 +1322,10 @@ const VoiceRoomLive = {
     }
 
     if (!ended) {
-      Components.showToast('Could not end event. Please try again.', 'error');
+      const message = failReason === 'not-owner' || failReason === 'orphaned-event'
+        ? "Couldn't end event — this session isn't linked to your signed-in account. Make sure you're signed in as the account that created it."
+        : 'Could not end event. Please try again.';
+      Components.showToast(message, 'error');
       return;
     }
 

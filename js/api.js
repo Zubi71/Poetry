@@ -852,10 +852,10 @@ const API = {
   async endMushairaSession(id) {
     const sb = SupabaseClient.get();
     const user = Auth.getCurrentUser();
-    if (!sb || !user?.id) return null;
+    if (!sb || !user?.id) return { ok: false, reason: 'not-signed-in' };
     const eventId = parseInt(id, 10);
     const now = new Date().toISOString();
-    const { data: existing } = await sb.from('mushaira_events').select('created_at').eq('id', eventId).single();
+    const { data: existing } = await sb.from('mushaira_events').select('created_at, user_id, host_name').eq('id', eventId).maybeSingle();
     const duration = existing?.created_at
       ? Math.max(1, Math.round((Date.now() - new Date(existing.created_at).getTime()) / 60000))
       : 0;
@@ -865,9 +865,23 @@ const API = {
       ended_at: now,
       end_time: now,
       duration_minutes: duration
-    }).eq('id', eventId).eq('user_id', user.id).select().single();
-    if (error) { console.warn('endMushairaSession:', error.message); return null; }
-    return data ? this.mapMushairaEvent(data) : null;
+    }).eq('id', eventId).eq('user_id', user.id).select().maybeSingle();
+    if (error) {
+      console.error('endMushairaSession failed:', error, { eventId, userId: user.id });
+      return { ok: false, reason: error.message };
+    }
+    if (!data) {
+      // RLS only lets the row's own user_id end it. If this event's
+      // user_id doesn't match the signed-in account (e.g. an orphaned row
+      // whose owner profile was deleted, or a different account than the
+      // one that created it), the update silently matches zero rows
+      // instead of erroring — surface *why* instead of a generic failure.
+      console.error('endMushairaSession: no row matched — likely an owner/user_id mismatch', {
+        eventId, signedInAs: user.id, rowOwner: existing?.user_id, rowHostName: existing?.host_name
+      });
+      return { ok: false, reason: existing?.user_id ? 'not-owner' : 'orphaned-event' };
+    }
+    return { ok: true, event: this.mapMushairaEvent(data) };
   },
 
   async startMushairaSession(id) {
