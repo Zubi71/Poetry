@@ -1,5 +1,9 @@
+import { useState } from 'react';
 import type { Participant } from '../../lib/types';
 import { SpeakerTile } from './SpeakerTile';
+
+const INITIAL_VISIBLE_SEATS = 5;
+const SEATS_PER_EXPAND = 5;
 
 export function SpeakersStage({
   speakers,
@@ -16,8 +20,14 @@ export function SpeakersStage({
   onToggleMic: () => void;
   onOpenProfile: (p: Participant) => void;
 }) {
+  const [visibleSlots, setVisibleSlots] = useState(INITIAL_VISIBLE_SEATS);
+
   const seatedSlots = new Set(speakers.map((s) => s.slot));
-  const emptySeatsToShow = Math.min(4, Math.max(0, maxSlots - speakers.length));
+  // Occupied seats are always shown even if they push past the current
+  // reveal threshold (e.g. the host assigned a seat beyond what's expanded).
+  const shownSlots = Math.min(maxSlots, Math.max(visibleSlots, speakers.length));
+  const emptySeatsToShow = Math.max(0, shownSlots - speakers.length);
+  const hasMoreSeats = shownSlots < maxSlots;
 
   return (
     <section className="mr-mx-4 mr-mt-6">
@@ -32,7 +42,7 @@ export function SpeakersStage({
             onToggleMic={onToggleMic}
           />
         ))}
-        {Array.from({ length: emptySeatsToShow }).map((_, i) => {
+        {Array.from({ length: emptySeatsToShow }).map(() => {
           let slot = 1;
           while (seatedSlots.has(slot)) slot++;
           seatedSlots.add(slot);
@@ -51,6 +61,15 @@ export function SpeakersStage({
           );
         })}
       </div>
+
+      {hasMoreSeats && (
+        <button
+          onClick={() => setVisibleSlots((v) => Math.min(maxSlots, v + SEATS_PER_EXPAND))}
+          className="mr-mt-3 mr-w-full mr-rounded-xl mr-border mr-border-dashed mr-border-white/15 mr-py-2 mr-text-xs mr-font-semibold mr-text-mr-muted hover:mr-border-mr-gold/40 hover:mr-text-mr-gold"
+        >
+          + More Seats ({shownSlots}/{maxSlots})
+        </button>
+      )}
     </section>
   );
 }

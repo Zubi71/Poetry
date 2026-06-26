@@ -332,6 +332,21 @@ const VoiceRoomLive = {
         if (p?.userId) byId.set(p.userId, { ...byId.get(p.userId), ...p });
       });
     });
+    // Overlay our own truth directly instead of waiting on the Supabase
+    // presence echo — channel.track() resolves before the sync event comes
+    // back, so without this our own mic/speaking state lags a round trip
+    // behind every toggle (showing "no one is speaking" right after we start).
+    const me = Auth.getCurrentUser();
+    if (me?.id && byId.has(me.id)) {
+      byId.set(me.id, {
+        ...byId.get(me.id),
+        micOn: this.micOn && !this.mutedByHost,
+        mutedByHost: this.mutedByHost,
+        canSpeak: this.canSpeak,
+        isSpeaking: this.isSpeaking,
+        slot: this.mySlot
+      });
+    }
     return [...byId.values()].sort((a, b) => {
       if (a.isHost) return -1;
       if (b.isHost) return 1;

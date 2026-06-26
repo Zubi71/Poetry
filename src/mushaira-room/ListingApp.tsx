@@ -66,7 +66,7 @@ export function ListingApp() {
         </span>
         <div className="mr-min-w-0 mr-flex-1">
           <h1 className="mr-text-base mr-font-bold mr-text-white">Live Mushaira</h1>
-          <p className="mr-truncate mr-font-mr-urdu mr-text-xs mr-text-mr-muted">شبوں کی محفل، دلوں کا سنگم</p>
+          <p dir="rtl" className="mr-truncate mr-text-right mr-font-mr-urdu mr-text-xs mr-text-mr-muted">شبوں کی محفل، دلوں کا سنگم</p>
         </div>
         <div className="mr-relative">
           <button
