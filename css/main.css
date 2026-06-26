@@ -154,6 +154,19 @@ input:focus, select:focus, textarea:focus {
   max-width: 720px;
 }
 
+/* The sidebar markup is always rendered now (so the mobile hamburger has
+   something to open on every page, including noSidebar pages like the
+   dashboard) — but on desktop/tablet it must stay out of the no-sidebar
+   pages' single-column grid. Below 768px .sidebar switches to a fixed
+   off-canvas drawer (see the max-width:767px rule), so this override only
+   applies at wider viewports where it would otherwise occupy a grid cell. */
+@media (min-width: 768px) {
+  .main-container.no-sidebar .sidebar,
+  .main-container.no-sidebar .sidebar-overlay {
+    display: none;
+  }
+}
+
 .main-container.no-sidebar.live-room-full {
   max-width: none;
   width: 100%;

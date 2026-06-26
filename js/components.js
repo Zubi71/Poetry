@@ -51,12 +51,8 @@ const Components = {
       { path: '/poems?trending=1', icon: 'trending', label: 'Trending' },
       { path: '/categories', icon: 'categories', label: 'Categories' },
       { path: '/poets', icon: 'poets', label: 'Poets' },
-      { path: '/top-poets', icon: 'contests', label: 'Top Poets' },
       { path: '/mushaira', icon: 'events', label: 'Mushaira Events', badgeKey: 'mushaira-live' },
-      { path: '/voice-rooms', icon: 'voice', label: 'Voice Rooms' },
-      { path: '/contests', icon: 'contests', label: 'Contests', badge: 'New', badgeType: 'new' },
       { path: '/bookmarks', icon: 'bookmarks', label: 'Bookmarks' },
-      { path: '/history', icon: 'history', label: 'History' },
       { path: '/messages', icon: 'messages', label: 'Messages' },
       { path: '/settings', icon: 'settings', label: 'Settings' },
       { path: '/dashboard', icon: 'profile', label: 'Dashboard' }
@@ -458,7 +454,7 @@ const Components = {
         ${liveRoom || !Auth.showAds() ? '' : this.renderAd('header')}
         ${liveRoom ? '' : '<div id="mushaira-live-banner-root"></div>'}
         <div class="main-container ${fullWidth ? 'full-width' : ''} ${noSidebar ? 'no-sidebar live-main' : ''}${liveRoom ? ' live-room-full' : ''}">
-          ${noSidebar ? '' : this.renderSidebar()}
+          ${this.renderSidebar()}
           <main class="main-content${liveRoom ? ' live-main-content' : ''}" id="main-content">${content}</main>
           ${noSidebar || fullWidth ? '' : this.renderRightSidebar()}
         </div>
