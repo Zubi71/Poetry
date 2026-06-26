@@ -7,7 +7,12 @@
 const LIVE_ROOM = {
   MUSHAIRA_SEATS: 20,
   VOICE_ROOM_SEATS: 20,
-  MAX_ACTIVE_SPEAKERS: 10
+  MAX_ACTIVE_SPEAKERS: 10,
+  // A plain <audio> element caps out at its original recording level
+  // (volume can't exceed 1.0) — this is how much louder we boost incoming
+  // speaker audio beyond that via Web Audio, since that was the actual
+  // ceiling making the room sound quiet even at full device volume.
+  REMOTE_AUDIO_GAIN: 1.8
 };
 
 const VoiceRoomLive = {
@@ -184,6 +189,11 @@ const VoiceRoomLive = {
     }
     this.remoteAudios.forEach(audio => audio.remove());
     this.remoteAudios.clear();
+    this._gainNodes?.clear();
+    if (this._audioCtx) {
+      try { this._audioCtx.close(); } catch (_) {}
+      this._audioCtx = null;
+    }
     this.channel = null;
     this.roomKey = null;
     this.presenceState = {};
@@ -973,10 +983,41 @@ const VoiceRoomLive = {
     if (!existing) {
       document.body.appendChild(audio);
       this.remoteAudios.set(userId, audio);
+      this._boostRemoteAudio(userId, audio);
+    }
+  },
+
+  // Routes the <audio> element's output through a compressor (to tame peaks)
+  // and a gain node (to boost loudness) instead of just letting it play at
+  // its native level — the element's own .volume can't exceed 1.0, which is
+  // the ceiling that made everyone sound quiet even at full device volume.
+  _boostRemoteAudio(userId, audioEl) {
+    try {
+      if (!this._audioCtx) {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        this._audioCtx = new AudioCtx();
+        this._gainNodes = new Map();
+      }
+      if (this._audioCtx.state === 'suspended') this._audioCtx.resume().catch(() => {});
+      const source = this._audioCtx.createMediaElementSource(audioEl);
+      const compressor = this._audioCtx.createDynamicsCompressor();
+      const gain = this._audioCtx.createGain();
+      gain.gain.value = LIVE_ROOM.REMOTE_AUDIO_GAIN;
+      source.connect(compressor);
+      compressor.connect(gain);
+      gain.connect(this._audioCtx.destination);
+      this._gainNodes.set(userId, { source, compressor, gain });
+    } catch (err) {
+      console.warn('Audio boost unavailable:', err);
     }
   },
 
   _stopRemoteAudio(userId) {
+    const nodes = this._gainNodes?.get(userId);
+    if (nodes) {
+      try { nodes.source.disconnect(); nodes.compressor.disconnect(); nodes.gain.disconnect(); } catch (_) {}
+      this._gainNodes.delete(userId);
+    }
     const audio = this.remoteAudios.get(userId);
     if (audio) {
       audio.remove();
