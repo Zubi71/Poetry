@@ -160,7 +160,12 @@ export function ListingApp() {
 
       <button
         onClick={() => Pages?.showCreateMushairaModal?.()}
-        className="mr-fixed mr-bottom-6 mr-right-5 mr-z-30 mr-flex mr-h-14 mr-w-14 mr-items-center mr-justify-center mr-rounded-full mr-bg-mr-gold-gradient mr-text-2xl mr-font-bold mr-text-black mr-shadow-mr-gold-glow-lg"
+        // The site's mobile bottom-nav is fixed, 60px tall, and z-index 100 —
+        // bottom-6/z-30 sat low enough and behind it that the nav bar covered
+        // the lower half of this button (including the + glyph). Clear it on
+        // mobile; sm: restores the tighter corner position once the nav bar
+        // is hidden (desktop/tablet).
+        className="mr-fixed mr-bottom-[76px] mr-right-5 mr-z-[110] mr-flex mr-h-14 mr-w-14 mr-items-center mr-justify-center mr-rounded-full mr-bg-mr-gold-gradient mr-text-2xl mr-font-bold mr-text-black mr-shadow-mr-gold-glow-lg sm:mr-bottom-6 sm:mr-z-30"
         aria-label="Create Mushaira event"
       >
         +
