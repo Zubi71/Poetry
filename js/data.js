@@ -209,9 +209,32 @@ function getVoiceRoomById(id) {
 }
 
 function getPoetById(id) {
-  const poet = APP_DATA.poets.find(p => p.id === parseInt(id));
-  if (poet && !poet.avatar) poet.avatar = getAvatarUrl(poet.name);
-  return poet;
+  // Seed/demo poets use small numeric ids — only treat the id as one of
+  // those if it's actually numeric. (parseInt("3fa85f64-...") would
+  // otherwise return 3 and accidentally match seed poet #3.)
+  const numericId = /^\d+$/.test(String(id)) ? parseInt(id, 10) : null;
+  const poet = numericId !== null ? APP_DATA.poets.find(p => p.id === numericId) : null;
+  if (poet) {
+    if (!poet.avatar) poet.avatar = getAvatarUrl(poet.name);
+    return poet;
+  }
+  // Real Supabase-authored poets (UUID ids) aren't in the seed catalog —
+  // synthesize a lightweight profile from poems of theirs we already have
+  // loaded, so "View Profile" on a real author's poem resolves to them
+  // instead of silently falling back to the current viewer's own dashboard.
+  const authoredPoems = getAllPoems().filter(p => (p.poetId === id || p.ownerId === id) && p.poetName);
+  if (!authoredPoems.length) return null;
+  return {
+    id,
+    name: authoredPoems[0].poetName,
+    avatar: getAvatarUrl(authoredPoems[0].poetName),
+    bio: '',
+    verified: false,
+    followers: 0,
+    following: 0,
+    posts: authoredPoems.length,
+    isRemote: true
+  };
 }
 
 function getPoemById(id) {
@@ -232,7 +255,10 @@ function getPoemsByCategory(categoryId) {
 }
 
 function getPoemsByPoet(poetId) {
-  return APP_DATA.poems.filter(p => p.poetId === parseInt(poetId));
+  const numericId = /^\d+$/.test(String(poetId)) ? parseInt(poetId, 10) : null;
+  return getAllPoems().filter(p =>
+    p.poetId === poetId || p.ownerId === poetId || (numericId !== null && p.poetId === numericId)
+  );
 }
 
 function getTrendingPoems() {
