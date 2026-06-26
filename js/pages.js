@@ -916,7 +916,7 @@ const Pages = {
     const tab = query.tab || 'poems';
     const stats = Storage.getAnalytics();
     const drafts = Storage.getDrafts();
-    const myPosts = Storage.getUserPosts().filter(p => p.poetName === user.name);
+    const myPosts = getAllPoems().filter(p => p.poetId === user.id || p.ownerId === user.id);
     const likedPoems = Storage.getLikes().map(id => getPoemById(id)).filter(Boolean);
     const poetMatch = APP_DATA.poets.find(p => p.name === user.name);
     const username = user.username || user.name?.toLowerCase().replace(/\s+/g, '') || 'poet';

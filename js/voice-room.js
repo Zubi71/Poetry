@@ -905,7 +905,24 @@ const VoiceRoomLive = {
       const { token, url } = await resp.json();
       if (!token || !url) throw new Error('missing token/url');
 
-      const room = new LivekitClient.Room({ adaptiveStream: true, dynacast: true });
+      const room = new LivekitClient.Room({
+        adaptiveStream: true,
+        dynacast: true,
+        audioCaptureDefaults: {
+          autoGainControl: true,
+          echoCancellation: true,
+          noiseSuppression: true,
+          sampleRate: 48000
+        },
+        // Default speech preset caps at 24kbps and drops audio during pauses
+        // (dtx) to save bandwidth — that's what made recitations sound thin/choppy.
+        // musicHighQuality (96kbps) + dtx off gives a continuous, fuller voice.
+        publishDefaults: {
+          audioPreset: LivekitClient.AudioPresets.musicHighQuality,
+          dtx: false,
+          red: true
+        }
+      });
       room
         .on(LivekitClient.RoomEvent.TrackSubscribed, (track, _pub, participant) => {
           if (track.kind === LivekitClient.Track.Kind.Audio) {
