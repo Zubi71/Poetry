@@ -43,12 +43,21 @@ export function PoetProfileModal({ participant, onClose }: { participant: Partic
     if (!participant) return;
     setProfile(null);
     resolveProfile(participant).then(setProfile);
-    setFollowing(!!Storage?.isFollowing?.(participant.userId));
+    if (SupabaseClient?.isEnabled?.() && !Auth?.isGuest?.()) {
+      API?.isFollowingUser?.(participant.userId).then((v: boolean) => setFollowing(!!v));
+    } else {
+      setFollowing(!!Storage?.isFollowing?.(participant.userId));
+    }
   }, [participant?.userId]);
 
   if (!participant) return null;
 
-  const toggleFollow = () => {
+  const toggleFollow = async () => {
+    if (SupabaseClient?.isEnabled?.() && !Auth?.isGuest?.()) {
+      const ok = following ? await API?.unfollowUser?.(participant.userId) : await API?.followUser?.(participant.userId);
+      if (ok) setFollowing(!following);
+      return;
+    }
     const now = Storage?.toggleFollow?.(participant.userId);
     setFollowing(!!now);
   };

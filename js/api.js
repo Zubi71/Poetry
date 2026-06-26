@@ -7,6 +7,7 @@ const API = {
       poetId: row.user_id || 0,
       ownerId: row.user_id || null,
       poetName: row.poet_name,
+      avatarUrl: row.profiles?.avatar_url || null,
       category: row.category || 'shayari',
       tagLabel: row.tag_label,
       cardTheme: row.card_theme || 'classic-dark',
@@ -60,12 +61,84 @@ const API = {
     return data;
   },
 
+  // The `following` table's columns are UUID — seed/demo poets use small
+  // integer ids and aren't real accounts, so any query with one of those
+  // ids would fail Postgres's uuid cast (400) rather than just finding
+  // nothing. Skip the network call entirely for those instead.
+  _isUuid(id) {
+    return typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+  },
+
+  async followUser(targetId) {
+    const sb = SupabaseClient.get();
+    const user = Auth.getCurrentUser();
+    if (!sb || !user?.id || user.isGuest || !this._isUuid(targetId) || targetId === user.id) return false;
+    const { error } = await sb.from('following').upsert({ follower_id: user.id, following_id: targetId });
+    if (error) { console.warn('followUser:', error.message); return false; }
+    return true;
+  },
+
+  async unfollowUser(targetId) {
+    const sb = SupabaseClient.get();
+    const user = Auth.getCurrentUser();
+    if (!sb || !user?.id || !this._isUuid(targetId)) return false;
+    const { error } = await sb.from('following').delete().eq('follower_id', user.id).eq('following_id', targetId);
+    if (error) { console.warn('unfollowUser:', error.message); return false; }
+    return true;
+  },
+
+  async isFollowingUser(targetId) {
+    const sb = SupabaseClient.get();
+    const user = Auth.getCurrentUser();
+    if (!sb || !user?.id || !this._isUuid(targetId)) return false;
+    const { data } = await sb.from('following').select('follower_id').eq('follower_id', user.id).eq('following_id', targetId).maybeSingle();
+    return !!data;
+  },
+
+  async getFollowCounts(userId) {
+    const sb = SupabaseClient.get();
+    if (!sb || !this._isUuid(userId)) return { followers: 0, following: 0 };
+    const [followersRes, followingRes] = await Promise.all([
+      sb.from('following').select('follower_id', { count: 'exact', head: true }).eq('following_id', userId),
+      sb.from('following').select('following_id', { count: 'exact', head: true }).eq('follower_id', userId)
+    ]);
+    return { followers: followersRes.count || 0, following: followingRes.count || 0 };
+  },
+
+  async getFollowersList(userId) {
+    const sb = SupabaseClient.get();
+    if (!sb || !this._isUuid(userId)) return [];
+    const { data, error } = await sb.from('following')
+      .select('follower_id, profiles!follower_id(id, display_name, avatar_url)')
+      .eq('following_id', userId);
+    if (error) { console.warn('getFollowersList:', error.message); return []; }
+    return (data || []).map(r => ({
+      id: r.profiles?.id || r.follower_id,
+      name: r.profiles?.display_name || 'User',
+      avatar: r.profiles?.avatar_url || null
+    }));
+  },
+
+  async getFollowingList(userId) {
+    const sb = SupabaseClient.get();
+    if (!sb || !this._isUuid(userId)) return [];
+    const { data, error } = await sb.from('following')
+      .select('following_id, profiles!following_id(id, display_name, avatar_url)')
+      .eq('follower_id', userId);
+    if (error) { console.warn('getFollowingList:', error.message); return []; }
+    return (data || []).map(r => ({
+      id: r.profiles?.id || r.following_id,
+      name: r.profiles?.display_name || 'User',
+      avatar: r.profiles?.avatar_url || null
+    }));
+  },
+
   async fetchPoems(limit = 50) {
     const sb = SupabaseClient.get();
     if (!sb) return [];
     const { data, error } = await sb
       .from('poems')
-      .select('*')
+      .select('*, profiles!user_id(avatar_url)')
       .order('created_at', { ascending: false })
       .limit(limit);
     if (error) { console.warn('fetchPoems:', error.message); return []; }

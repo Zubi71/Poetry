@@ -192,17 +192,91 @@ const App = {
       };
     });
 
-    // Follow buttons
+    // Follow buttons — poetId is a real Supabase UUID for real authors, so it
+    // must stay a string (parseInt() on a UUID silently mangles it to NaN
+    // or a wrong number, which is why following real users never worked).
     document.querySelectorAll('.follow-btn').forEach(btn => {
-      btn.onclick = (e) => {
+      btn.onclick = async (e) => {
         e.preventDefault();
         e.stopPropagation();
-        const poetId = parseInt(btn.dataset.poetId);
-        const following = Storage.toggleFollow(poetId);
-        Components.showToast(following ? 'Now following!' : 'Unfollowed');
-        Router.navigate();
+        const poetId = btn.dataset.poetId;
+        const wasFollowing = btn.classList.contains('btn-outline-gold');
+        let nowFollowing = wasFollowing;
+
+        if (SupabaseClient.isEnabled() && !Auth.isGuest()) {
+          const ok = wasFollowing ? await API.unfollowUser(poetId) : await API.followUser(poetId);
+          if (!ok) {
+            Components.showToast('Could not update follow status', 'error');
+            return;
+          }
+          nowFollowing = !wasFollowing;
+        } else {
+          nowFollowing = Storage.toggleFollow(poetId);
+        }
+
+        document.querySelectorAll(`.follow-btn[data-poet-id="${poetId}"]`).forEach(b => {
+          b.classList.toggle('btn-gold', !nowFollowing);
+          b.classList.toggle('btn-outline-gold', nowFollowing);
+          b.textContent = nowFollowing ? 'Following' : 'Follow';
+        });
+        Components.showToast(nowFollowing ? 'Now following!' : 'Unfollowed');
       };
     });
+
+    // Followers/Following count → real people-list modal
+    document.querySelectorAll('[data-follow-list]').forEach(btn => {
+      btn.onclick = async () => {
+        const role = btn.dataset.followList;
+        const userId = btn.dataset.userId;
+        const title = role === 'followers' ? 'Followers' : 'Following';
+        if (!userId || !SupabaseClient.isEnabled()) {
+          Components.showModal(title, '<p class="empty-state">Not available right now.</p>');
+          return;
+        }
+        Components.showModal(title, '<p class="loading-inline">Loading…</p>');
+        const list = role === 'followers' ? await API.getFollowersList(userId) : await API.getFollowingList(userId);
+        const body = list.length
+          ? `<div class="follow-list">${list.map(p => `
+              <a href="#/poet/${p.id}" class="follow-list-item" data-close-modal="true">
+                ${avatarImg(p.name, 'follow-list-avatar', p.name, p.avatar)}
+                <span class="follow-list-name">${p.name}</span>
+              </a>
+            `).join('')}</div>`
+          : `<p class="empty-state">${role === 'followers' ? 'No followers yet.' : 'Not following anyone yet.'}</p>`;
+        Components.showModal(title, body);
+        document.querySelectorAll('[data-close-modal]').forEach(link => {
+          link.addEventListener('click', () => Components.closeModal());
+        });
+      };
+    });
+
+    // Async-enhance follow counts on a profile page with real Supabase data
+    // once the page (built synchronously from whatever was already cached) is up.
+    const profileRoot = document.querySelector('.profile-v2[data-user-id]');
+    if (profileRoot && SupabaseClient.isEnabled() && profileRoot.dataset.userId) {
+      API.getFollowCounts(profileRoot.dataset.userId).then(counts => {
+        const followersEl = document.getElementById('profile-followers-count');
+        const followingEl = document.getElementById('profile-following-count');
+        if (followersEl) followersEl.textContent = Components.formatNumber(counts.followers);
+        if (followingEl) followingEl.textContent = Components.formatNumber(counts.following);
+      });
+    }
+
+    // Any follow buttons on this page (profile, poets grid, etc.) were
+    // rendered from local/seed state and may be wrong for real accounts —
+    // one batched query to refresh all of them against who you actually follow.
+    const followBtns = document.querySelectorAll('.follow-btn[data-poet-id]');
+    if (followBtns.length && SupabaseClient.isEnabled() && !Auth.isGuest()) {
+      API.getFollowingList(Auth.getCurrentUser()?.id).then(list => {
+        const followingIds = new Set(list.map(p => String(p.id)));
+        followBtns.forEach(b => {
+          const isFollowing = followingIds.has(String(b.dataset.poetId));
+          b.classList.toggle('btn-gold', !isFollowing);
+          b.classList.toggle('btn-outline-gold', isFollowing);
+          b.textContent = isFollowing ? 'Following' : 'Follow';
+        });
+      });
+    }
 
     // Report & Block
     document.querySelectorAll('.report-btn').forEach(btn => {

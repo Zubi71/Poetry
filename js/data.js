@@ -224,10 +224,11 @@ function getPoetById(id) {
   // instead of silently falling back to the current viewer's own dashboard.
   const authoredPoems = getAllPoems().filter(p => (p.poetId === id || p.ownerId === id) && p.poetName);
   if (!authoredPoems.length) return null;
+  const realAvatar = authoredPoems.find(p => p.avatarUrl)?.avatarUrl;
   return {
     id,
     name: authoredPoems[0].poetName,
-    avatar: getAvatarUrl(authoredPoems[0].poetName),
+    avatar: realAvatar || getAvatarUrl(authoredPoems[0].poetName),
     bio: '',
     verified: false,
     followers: 0,

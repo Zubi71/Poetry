@@ -182,7 +182,8 @@ const Pages = {
     `;
 
     const content = Components.renderUserProfile({
-      user: { name: poet.name, verified: poet.verified },
+      user: { name: poet.name, verified: poet.verified, avatar: poet.avatar },
+      userId: poet.id,
       username,
       bio: poet.bio,
       isOwn: false,
@@ -235,7 +236,7 @@ const Pages = {
         <a href="#/poems" class="back-link">${Components.icon('back')} Back to Poems</a>
         <div class="poem-detail-header">
           <a href="${poet ? `#/poet/${poem.poetId}` : '#/dashboard'}" class="poet-info">
-            ${avatarImg(poem.poetName, '', poem.poetName)}
+            ${avatarImg(poem.poetName, '', poem.poetName, poem.avatarUrl)}
             <div>
               <span class="poet-name">${poem.poetName}</span>
               <span class="post-time">${poem.time}</span>
@@ -942,6 +943,7 @@ const Pages = {
 
     const content = Components.renderUserProfile({
       user,
+      userId: user.id,
       username,
       bio: user.bio,
       isOwn: true,

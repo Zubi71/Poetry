@@ -2148,6 +2148,16 @@ input:focus, select:focus, textarea:focus {
   border-radius: var(--radius-sm);
   background: var(--bg-card);
   text-align: center;
+  font-family: inherit;
+  width: 100%;
+}
+
+button.profile-v2-stat-card {
+  cursor: pointer;
+}
+
+button.profile-v2-stat-card:hover {
+  border-color: rgba(212, 175, 55, 0.7);
 }
 
 .profile-v2-stat-icon {
@@ -2172,6 +2182,41 @@ input:focus, select:focus, textarea:focus {
 .profile-v2-stat-card > span:last-child {
   font-size: 11px;
   color: var(--text-muted);
+}
+
+.follow-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.follow-list-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 4px;
+  border-radius: var(--radius-sm);
+  color: var(--text-main);
+  transition: background var(--transition);
+}
+
+.follow-list-item:hover {
+  background: var(--bg-card);
+}
+
+.follow-list-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.follow-list-name {
+  font-weight: 600;
+  font-size: 14px;
 }
 
 .profile-v2-actions {

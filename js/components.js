@@ -224,7 +224,7 @@ const Components = {
       <article class="poem-card poem-card-v2 poem-card-${theme}" data-poem-id="${poem.id}">
         <div class="poem-card-header">
           <a href="${poet ? `#/poet/${poem.poetId}` : '#/dashboard'}" class="poet-info">
-            ${avatarImg(poem.poetName, 'poet-avatar-gold', poem.poetName)}
+            ${avatarImg(poem.poetName, 'poet-avatar-gold', poem.poetName, poem.avatarUrl)}
             <div>
               <span class="poet-name">${poem.poetName}</span>
               <span class="post-time"><span class="time-icon">${this.icon('clock')}</span> ${poem.time}</span>
@@ -299,6 +299,7 @@ const Components = {
   renderUserProfile(options) {
     const {
       user,
+      userId,
       username,
       bio,
       isOwn = false,
@@ -327,7 +328,7 @@ const Components = {
     ` : actionsHtml;
 
     return `
-      <div class="profile-v2">
+      <div class="profile-v2" data-user-id="${userId || ''}" data-is-own="${isOwn}">
         <div class="profile-v2-top">
           <div class="profile-v2-avatar-wrap">
             ${avatarImg(user.name, 'profile-v2-avatar', user.name, user.avatar)}
@@ -342,16 +343,16 @@ const Components = {
         </div>
 
         <div class="profile-v2-stats">
-          <div class="profile-v2-stat-card">
+          <button type="button" class="profile-v2-stat-card" data-follow-list="followers" data-user-id="${userId || ''}">
             <span class="profile-v2-stat-icon">${this.icon('poets')}</span>
-            <strong>${this.formatNumber(followers)}</strong>
+            <strong id="profile-followers-count">${this.formatNumber(followers)}</strong>
             <span>Followers</span>
-          </div>
-          <div class="profile-v2-stat-card">
+          </button>
+          <button type="button" class="profile-v2-stat-card" data-follow-list="following" data-user-id="${userId || ''}">
             <span class="profile-v2-stat-icon">${this.icon('profile')}</span>
-            <strong>${this.formatNumber(following)}</strong>
+            <strong id="profile-following-count">${this.formatNumber(following)}</strong>
             <span>Following</span>
-          </div>
+          </button>
           <div class="profile-v2-stat-card">
             <span class="profile-v2-stat-icon">${this.icon('poems')}</span>
             <strong>${poemCount}</strong>
