@@ -10,6 +10,7 @@ export function BottomDock({
   isHost,
   handRaised,
   paused,
+  commentCount,
   onToggleMic,
   onRaiseHand,
   onCheckIn,
@@ -20,7 +21,8 @@ export function BottomDock({
   onExit,
   onOpenInfo,
   onTogglePause,
-  onEndEvent
+  onEndEvent,
+  onOpenComments
 }: {
   micOn: boolean;
   mutedByHost: boolean;
@@ -29,6 +31,7 @@ export function BottomDock({
   isHost: boolean;
   handRaised: boolean;
   paused: boolean;
+  commentCount: number;
   onToggleMic: () => void;
   onRaiseHand: () => void;
   onCheckIn: () => void;
@@ -40,6 +43,7 @@ export function BottomDock({
   onOpenInfo: (panel: 'info' | 'rules' | 'report') => void;
   onTogglePause: () => void;
   onEndEvent: () => void;
+  onOpenComments: () => void;
 }) {
   const [reactOpen, setReactOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
@@ -57,102 +61,108 @@ export function BottomDock({
   // everyone else has to raise a hand and wait for the host to call on them.
   const claimSeat = () => (isHost ? onCheckIn() : onRaiseHand());
 
+  const speaking = hasSeat && micOn && !blocked;
+  const waiting = !isHost && handRaised && !hasSeat;
+
   return (
-    <div className="mr-fixed mr-bottom-0 mr-left-0 mr-right-0 mr-z-40 mr-border-t mr-border-mr-gold/20 mr-bg-mr-bg/90 mr-px-3 mr-py-3 mr-backdrop-blur-xl">
-      <div className="mr-relative mr-mx-auto mr-flex mr-max-w-2xl mr-items-center mr-justify-between mr-gap-2">
+    <div className="mr-fixed mr-bottom-0 mr-left-0 mr-right-0 mr-z-40 mr-border-t mr-border-mr-gold/20 mr-bg-mr-bg/95 mr-px-4 mr-py-3 mr-backdrop-blur-xl">
+      <div className="mr-relative mr-mx-auto mr-flex mr-max-w-2xl mr-items-center mr-justify-between mr-gap-3">
         <AnimatePresence>
           {bursts.map((b) => (
             <ReactionBurst key={b.id} id={b.id} emoji={b.emoji} />
           ))}
         </AnimatePresence>
 
+        {/* Primary speak/seat control — collapses the old separate mic,
+            raise-hand and "Request to Speak" buttons into one circle. */}
         <button
           onClick={hasSeat ? onToggleMic : claimSeat}
-          disabled={hasSeat ? blocked : !isHost && handRaised}
-          className={`mr-flex mr-h-12 mr-w-12 mr-flex-col mr-items-center mr-justify-center mr-rounded-2xl mr-text-lg ${
-            hasSeat && micOn && !blocked ? 'mr-bg-mr-gold-gradient mr-text-black mr-shadow-mr-gold-glow' : 'mr-bg-white/5 mr-text-white'
-          } disabled:mr-opacity-40`}
-          aria-label="Toggle microphone"
+          disabled={hasSeat ? blocked : waiting}
+          className={`mr-flex mr-h-16 mr-w-16 mr-shrink-0 mr-flex-col mr-items-center mr-justify-center mr-gap-0.5 mr-rounded-full mr-border-2 mr-text-xl disabled:mr-opacity-40 ${
+            speaking
+              ? 'mr-border-mr-gold mr-bg-mr-gold-gradient mr-text-black mr-shadow-mr-gold-glow'
+              : waiting
+              ? 'mr-border-mr-purple/70 mr-bg-mr-purple/15 mr-text-white'
+              : 'mr-border-white/20 mr-bg-white/5 mr-text-white'
+          }`}
+          aria-label={hasSeat ? 'Toggle microphone' : 'Request to speak'}
         >
-          {hasSeat ? (micOn && !blocked ? '🎙️' : '🎤') : !isHost && handRaised ? '✋' : '🪑'}
-          <span className="mr-text-[9px] mr-font-medium">
-            {hasSeat ? (micOn && !blocked ? 'On' : 'Off') : !isHost && handRaised ? 'Raised' : 'Seat'}
+          {hasSeat ? (speaking ? '🎙️' : '🎤') : waiting ? '✋' : '🎤'}
+          <span className="mr-text-[9px] mr-font-semibold">
+            {hasSeat ? (speaking ? 'On Stage' : 'Off') : waiting ? 'Raised' : isHost ? 'Seat' : 'Request'}
           </span>
         </button>
 
-        <button
-          onClick={onRaiseHand}
-          disabled={hasSeat || isHost || handRaised}
-          className={`mr-flex mr-h-12 mr-w-12 mr-flex-col mr-items-center mr-justify-center mr-rounded-2xl mr-text-lg disabled:mr-opacity-40 ${
-            handRaised && !hasSeat ? 'mr-bg-mr-gold-gradient mr-text-black' : 'mr-bg-white/5 mr-text-white'
-          }`}
-          aria-label="Raise hand"
-        >
-          ✋
-          <span className="mr-text-[9px] mr-font-medium">{handRaised && !hasSeat ? 'Waiting' : 'Raise'}</span>
-        </button>
+        <div className="mr-flex mr-flex-1 mr-items-center mr-justify-center mr-gap-2">
+          <div className="mr-relative">
+            <button
+              onClick={() => setMoreOpen((v) => !v)}
+              className="mr-flex mr-h-12 mr-w-12 mr-items-center mr-justify-center mr-rounded-full mr-bg-white/5 mr-text-lg mr-text-white"
+              aria-label="More options"
+            >
+              👥
+            </button>
+            <AnimatePresence>
+              {moreOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                  className="mr-absolute mr-bottom-full mr-left-0 mr-z-20 mr-mb-3 mr-w-44 mr-overflow-hidden mr-rounded-2xl mr-border mr-border-white/10 mr-bg-mr-bg-secondary mr-shadow-mr-gold-glow"
+                >
+                  {[
+                    { label: 'Room Info', action: () => onOpenInfo('info') },
+                    { label: 'Rules', action: () => onOpenInfo('rules') },
+                    { label: 'Send Gift', action: onDonate },
+                    { label: 'Share', action: onShare },
+                    ...(hasSeat ? [{ label: 'Leave Seat', action: onLeaveSeat }] : []),
+                    ...(isHost ? [{ label: paused ? 'Resume Live' : 'Pause Live', action: onTogglePause }] : []),
+                    ...(isHost ? [{ label: 'End Room', action: onEndEvent, danger: true }] : []),
+                    { label: 'Exit Room', action: onExit, danger: true }
+                  ].map((item: any) => (
+                    <button
+                      key={item.label}
+                      onClick={() => {
+                        item.action();
+                        setMoreOpen(false);
+                      }}
+                      className={`mr-block mr-w-full mr-px-4 mr-py-2.5 mr-text-left mr-text-sm hover:mr-bg-white/5 ${item.danger ? 'mr-text-red-400' : 'mr-text-white'}`}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
 
-        <button
-          onClick={hasSeat ? onToggleMic : claimSeat}
-          disabled={!hasSeat && !isHost && handRaised}
-          className="mr-flex mr-h-12 mr-flex-1 mr-items-center mr-justify-center mr-rounded-2xl mr-bg-mr-purple-gradient mr-px-3 mr-text-sm mr-font-bold mr-text-white mr-shadow-mr-purple-glow disabled:mr-opacity-40"
-        >
-          {hasSeat ? 'On Stage' : !isHost && handRaised ? 'Hand Raised — Waiting' : 'Request to Speak'}
-        </button>
+          <div className="mr-relative">
+            <button
+              onClick={() => setReactOpen((v) => !v)}
+              className="mr-flex mr-h-12 mr-w-12 mr-items-center mr-justify-center mr-rounded-full mr-bg-white/5 mr-text-lg"
+              aria-label="Send reaction"
+            >
+              ❤️
+            </button>
+            <ReactionPicker open={reactOpen} onClose={() => setReactOpen(false)} onPick={fireReaction} />
+          </div>
 
-        <div className="mr-relative">
           <button
-            onClick={() => setReactOpen((v) => !v)}
-            className="mr-flex mr-h-12 mr-w-12 mr-flex-col mr-items-center mr-justify-center mr-rounded-2xl mr-bg-white/5 mr-text-lg"
-            aria-label="React"
+            onClick={onShare}
+            className="mr-flex mr-h-12 mr-w-12 mr-items-center mr-justify-center mr-rounded-full mr-bg-white/5 mr-text-lg mr-text-white"
+            aria-label="Share room"
           >
-            😍
-            <span className="mr-text-[9px] mr-font-medium mr-text-white">React</span>
+            ↗
           </button>
-          <ReactionPicker open={reactOpen} onClose={() => setReactOpen(false)} onPick={fireReaction} />
         </div>
 
-        <div className="mr-relative">
-          <button
-            onClick={() => setMoreOpen((v) => !v)}
-            className="mr-flex mr-h-12 mr-w-12 mr-flex-col mr-items-center mr-justify-center mr-rounded-2xl mr-bg-white/5 mr-text-lg mr-text-white"
-            aria-label="More"
-          >
-            ⋯
-          </button>
-          <AnimatePresence>
-            {moreOpen && (
-              <motion.div
-                initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                className="mr-absolute mr-bottom-full mr-right-0 mr-z-20 mr-mb-3 mr-w-44 mr-overflow-hidden mr-rounded-2xl mr-border mr-border-white/10 mr-bg-mr-bg-secondary mr-shadow-mr-gold-glow"
-              >
-                {[
-                  { label: 'Room Info', action: () => onOpenInfo('info') },
-                  { label: 'Rules', action: () => onOpenInfo('rules') },
-                  { label: 'Send Gift', action: onDonate },
-                  { label: 'Share', action: onShare },
-                  ...(hasSeat ? [{ label: 'Leave Seat', action: onLeaveSeat }] : []),
-                  ...(isHost ? [{ label: paused ? 'Resume Live' : 'Pause Live', action: onTogglePause }] : []),
-                  ...(isHost ? [{ label: 'End Room', action: onEndEvent, danger: true }] : []),
-                  { label: 'Exit Room', action: onExit, danger: true }
-                ].map((item: any) => (
-                  <button
-                    key={item.label}
-                    onClick={() => {
-                      item.action();
-                      setMoreOpen(false);
-                    }}
-                    className={`mr-block mr-w-full mr-px-4 mr-py-2.5 mr-text-left mr-text-sm hover:mr-bg-white/5 ${item.danger ? 'mr-text-red-400' : 'mr-text-white'}`}
-                  >
-                    {item.label}
-                  </button>
-                ))}
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
+        <button
+          onClick={onOpenComments}
+          className="mr-flex mr-h-12 mr-shrink-0 mr-items-center mr-gap-1.5 mr-rounded-full mr-bg-mr-purple-gradient mr-px-4 mr-text-sm mr-font-bold mr-text-white mr-shadow-mr-purple-glow"
+          aria-label="Jump to comments"
+        >
+          💬 {commentCount > 0 && <span>{commentCount > 99 ? '99+' : commentCount}</span>}
+        </button>
       </div>
     </div>
   );

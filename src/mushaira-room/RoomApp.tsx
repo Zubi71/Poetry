@@ -89,6 +89,8 @@ export function RoomApp({ meta }: { meta: RoomMeta }) {
         isHost={store.isHost}
         handRaised={store.handRaised}
         paused={store.paused}
+        commentCount={store.chatMessages.length}
+        onOpenComments={() => document.getElementById('live-comments-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
         onToggleMic={() => store.actions.toggleMic()}
         onRaiseHand={() => store.actions.raiseHand()}
         onCheckIn={() => store.actions.checkIn()}

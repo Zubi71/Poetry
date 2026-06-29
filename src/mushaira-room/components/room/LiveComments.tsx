@@ -36,7 +36,7 @@ export function LiveComments({
   };
 
   return (
-    <section className="mr-mx-4 mr-mt-6">
+    <section id="live-comments-section" className="mr-mx-4 mr-mt-6">
       <h2 className="mr-mb-3 mr-text-sm mr-font-bold mr-text-white">💬 Live Comments</h2>
 
       {pinned.length > 0 && (
