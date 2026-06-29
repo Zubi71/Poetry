@@ -7,6 +7,7 @@ import { CurrentlySpeaking } from './components/room/CurrentlySpeaking';
 import { SpeakersStage } from './components/room/SpeakersStage';
 import { AudienceSection } from './components/room/AudienceSection';
 import { LiveComments } from './components/room/LiveComments';
+import { FloatingComments } from './components/room/FloatingComments';
 import { BottomDock } from './components/room/BottomDock';
 import { PoetProfileModal } from './components/modals/PoetProfileModal';
 import { ModeratorPanel } from './components/modals/ModeratorPanel';
@@ -90,7 +91,7 @@ export function RoomApp({ meta }: { meta: RoomMeta }) {
         handRaised={store.handRaised}
         paused={store.paused}
         commentCount={store.chatMessages.length}
-        onOpenComments={() => document.getElementById('live-comments-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+        onSendComment={(text) => store.actions.sendChat(text)}
         onToggleMic={() => store.actions.toggleMic()}
         onRaiseHand={() => store.actions.raiseHand()}
         onCheckIn={() => store.actions.checkIn()}
@@ -123,6 +124,8 @@ export function RoomApp({ meta }: { meta: RoomMeta }) {
       />
 
       <InfoModal panel={infoPanel} meta={roomMeta} onClose={() => setInfoPanel(null)} />
+
+      <FloatingComments messages={store.chatMessages} />
     </div>
   );
 }

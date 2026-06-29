@@ -22,7 +22,7 @@ export function BottomDock({
   onOpenInfo,
   onTogglePause,
   onEndEvent,
-  onOpenComments
+  onSendComment
 }: {
   micOn: boolean;
   mutedByHost: boolean;
@@ -43,11 +43,21 @@ export function BottomDock({
   onOpenInfo: (panel: 'info' | 'rules' | 'report') => void;
   onTogglePause: () => void;
   onEndEvent: () => void;
-  onOpenComments: () => void;
+  onSendComment: (text: string) => void;
 }) {
   const [reactOpen, setReactOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [commentBarOpen, setCommentBarOpen] = useState(false);
+  const [commentText, setCommentText] = useState('');
   const [bursts, setBursts] = useState<{ id: number; emoji: string }[]>([]);
+
+  const submitComment = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!commentText.trim()) return;
+    onSendComment(commentText.trim());
+    setCommentText('');
+    setCommentBarOpen(false);
+  };
 
   const fireReaction = (emoji: string) => {
     onReaction(emoji);
@@ -71,6 +81,33 @@ export function BottomDock({
           {bursts.map((b) => (
             <ReactionBurst key={b.id} id={b.id} emoji={b.emoji} />
           ))}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {commentBarOpen && (
+            <motion.form
+              key="comment-bar"
+              onSubmit={submitComment}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 12 }}
+              className="mr-absolute mr-bottom-full mr-left-0 mr-right-0 mr-z-20 mr-mb-3 mr-flex mr-gap-2 mr-rounded-full mr-border mr-border-white/10 mr-bg-mr-bg-secondary mr-p-1.5 mr-shadow-mr-gold-glow"
+            >
+              <input
+                autoFocus
+                value={commentText}
+                onChange={(e) => setCommentText(e.target.value)}
+                placeholder="Say something…"
+                className="mr-flex-1 mr-rounded-full mr-bg-white/5 mr-px-4 mr-py-2 mr-text-sm mr-text-white mr-placeholder-mr-muted mr-outline-none"
+              />
+              <button
+                type="submit"
+                className="mr-shrink-0 mr-rounded-full mr-bg-mr-purple-gradient mr-px-4 mr-text-sm mr-font-semibold mr-text-white"
+              >
+                Send
+              </button>
+            </motion.form>
+          )}
         </AnimatePresence>
 
         {/* Primary speak/seat control — collapses the old separate mic,
@@ -157,9 +194,9 @@ export function BottomDock({
         </div>
 
         <button
-          onClick={onOpenComments}
+          onClick={() => setCommentBarOpen((v) => !v)}
           className="mr-flex mr-h-12 mr-shrink-0 mr-items-center mr-gap-1.5 mr-rounded-full mr-bg-mr-purple-gradient mr-px-4 mr-text-sm mr-font-bold mr-text-white mr-shadow-mr-purple-glow"
-          aria-label="Jump to comments"
+          aria-label="Write a comment"
         >
           💬 {commentCount > 0 && <span>{commentCount > 99 ? '99+' : commentCount}</span>}
         </button>
