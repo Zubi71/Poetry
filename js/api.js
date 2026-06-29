@@ -844,17 +844,40 @@ const API = {
     const eventId = parseInt(id, 10);
     if (!eventId) return false;
 
-    const { error } = await sb
-      .from('mushaira_events')
-      .delete()
-      .eq('id', eventId)
-      .eq('user_id', user.id);
+    // Admins can delete any event, not just their own — the RLS policy
+    // (supabase/admin-mushaira.sql) grants this at the DB level too, but
+    // the ownership filter below must also be skipped client-side or the
+    // WHERE clause itself would still exclude rows the admin doesn't own.
+    let query = sb.from('mushaira_events').delete().eq('id', eventId);
+    if (!Auth.isAdmin()) query = query.eq('user_id', user.id);
+    const { data, error } = await query.select('id');
 
     if (error) {
       console.warn('deleteMushairaEvent:', error.message);
       return false;
     }
-    return true;
+    // A delete that matches 0 rows (e.g. blocked by RLS) returns no error,
+    // so an empty result has to be treated as a failure too.
+    return (data || []).length > 0;
+  },
+
+  async deleteMushairaEvents(ids) {
+    const sb = SupabaseClient.get();
+    const user = Auth.getCurrentUser();
+    if (!sb || !user?.id || user.isGuest) return [];
+
+    const eventIds = [...new Set(ids.map(id => parseInt(id, 10)).filter(Boolean))];
+    if (!eventIds.length) return [];
+
+    let query = sb.from('mushaira_events').delete().in('id', eventIds);
+    if (!Auth.isAdmin()) query = query.eq('user_id', user.id);
+    const { data, error } = await query.select('id');
+
+    if (error) {
+      console.warn('deleteMushairaEvents:', error.message);
+      return [];
+    }
+    return (data || []).map(row => row.id);
   },
 
   async fetchVoiceRooms() {

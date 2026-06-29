@@ -6278,6 +6278,24 @@ body:has(.admin-shell) {
 .admin-badge.ok { background: rgba(34, 197, 94, 0.12); color: #22c55e; }
 .admin-badge.warn { background: rgba(234, 179, 8, 0.15); color: #eab308; }
 
+.admin-table th:first-child,
+.admin-table td:first-child {
+  width: 36px;
+  padding-right: 0;
+}
+
+.admin-bulk-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  background: rgba(212, 175, 55, 0.1);
+  border: 1px solid rgba(212, 175, 55, 0.25);
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
 .admin-poem-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));

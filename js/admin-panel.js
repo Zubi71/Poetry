@@ -298,16 +298,27 @@ const AdminPanel = {
         <div class="admin-toolbar">
           <h2>Mushaira Events</h2>
           <div class="admin-toolbar-actions">
+            <span class="admin-bulk-info" id="admin-mushaira-bulk-info" hidden>
+              <strong id="admin-mushaira-selected-count">0</strong> selected
+              <button type="button" class="btn btn-ghost btn-sm" id="admin-mushaira-bulk-delete">Delete Selected</button>
+              <button type="button" class="btn btn-ghost btn-sm" id="admin-mushaira-clear-selection">Clear</button>
+            </span>
             <button type="button" class="btn btn-gold btn-sm" id="admin-create-mushaira">+ Create Event</button>
             <a href="#/mushaira" class="btn btn-outline-gold btn-sm">View Public Page</a>
           </div>
         </div>
         <div class="admin-table-wrap">
           <table class="admin-table">
-            <thead><tr><th>Event</th><th>Host</th><th>Status</th><th>Viewers</th><th>Likes</th><th>Actions</th></tr></thead>
+            <thead>
+              <tr>
+                <th><input type="checkbox" id="admin-mushaira-select-all" aria-label="Select all events"></th>
+                <th>Event</th><th>Host</th><th>Status</th><th>Viewers</th><th>Likes</th><th>Actions</th>
+              </tr>
+            </thead>
             <tbody>
               ${events.length ? events.map(e => `
                 <tr data-event-id="${e.id}">
+                  <td><input type="checkbox" class="admin-mushaira-select" data-id="${e.id}" aria-label="Select ${this.esc(e.title)}"></td>
                   <td><strong>${this.esc(e.title)}</strong><br><small>${this.esc(e.date || '')} ${this.esc(e.time || '')}</small></td>
                   <td>${this.esc(e.host)}</td>
                   <td>${e.live ? '<span class="admin-badge live">Live</span>' : e.ended ? '<span class="admin-badge">Ended</span>' : e.waiting ? '<span class="admin-badge">Waiting</span>' : '<span class="admin-badge">Scheduled</span>'}</td>
@@ -319,12 +330,33 @@ const AdminPanel = {
                     <button type="button" class="btn btn-ghost btn-sm admin-delete-mushaira" data-id="${e.id}">Delete</button>
                   </td>
                 </tr>
-              `).join('') : '<tr><td colspan="6" class="empty-hint">No mushaira events yet.</td></tr>'}
+              `).join('') : '<tr><td colspan="7" class="empty-hint">No mushaira events yet.</td></tr>'}
             </tbody>
           </table>
         </div>
       </div>
     `;
+  },
+
+  async _deleteMushairaEvents(ids) {
+    let deletedIds = ids;
+    if (SupabaseClient.isEnabled()) {
+      deletedIds = await API.deleteMushairaEvents(ids);
+      if (!deletedIds.length) {
+        Components.showToast('Could not delete — you may not have permission for this event', 'error');
+        return;
+      }
+      if (deletedIds.length < ids.length) {
+        Components.showToast(`Deleted ${deletedIds.length} of ${ids.length} — some events could not be deleted`, 'error');
+      } else {
+        Components.showToast(deletedIds.length > 1 ? `${deletedIds.length} events deleted` : 'Event deleted');
+      }
+    } else {
+      ids.forEach(id => Storage.removeCustomMushaira(id));
+    }
+    const deletedSet = new Set(deletedIds);
+    window.REMOTE_MUSHAIRA_EVENTS = (window.REMOTE_MUSHAIRA_EVENTS || []).filter(e => !deletedSet.has(e.id));
+    Router.navigate();
   },
 
   bindMushairaAdminEvents() {
@@ -335,12 +367,57 @@ const AdminPanel = {
     document.querySelectorAll('.admin-delete-mushaira').forEach(btn => {
       btn.onclick = async () => {
         if (!confirm('Delete this event?')) return;
-        const id = parseInt(btn.dataset.id, 10);
-        if (SupabaseClient.isEnabled()) await API.deleteMushairaEvent(id);
-        else Storage.removeCustomMushaira(id);
-        window.REMOTE_MUSHAIRA_EVENTS = (window.REMOTE_MUSHAIRA_EVENTS || []).filter(e => e.id !== id);
-        Router.navigate();
+        await this._deleteMushairaEvents([parseInt(btn.dataset.id, 10)]);
       };
+    });
+
+    const selected = new Set();
+    const selectAll = document.getElementById('admin-mushaira-select-all');
+    const bulkInfo = document.getElementById('admin-mushaira-bulk-info');
+    const countEl = document.getElementById('admin-mushaira-selected-count');
+    const rowChecks = () => Array.from(document.querySelectorAll('.admin-mushaira-select'));
+
+    const refreshBulkUI = () => {
+      if (countEl) countEl.textContent = String(selected.size);
+      if (bulkInfo) bulkInfo.hidden = selected.size === 0;
+      const all = rowChecks();
+      if (selectAll) {
+        selectAll.checked = all.length > 0 && selected.size === all.length;
+        selectAll.indeterminate = selected.size > 0 && selected.size < all.length;
+      }
+    };
+
+    rowChecks().forEach(cb => {
+      cb.onchange = () => {
+        const id = parseInt(cb.dataset.id, 10);
+        if (cb.checked) selected.add(id);
+        else selected.delete(id);
+        refreshBulkUI();
+      };
+    });
+
+    if (selectAll) {
+      selectAll.onchange = () => {
+        rowChecks().forEach(cb => {
+          cb.checked = selectAll.checked;
+          const id = parseInt(cb.dataset.id, 10);
+          if (selectAll.checked) selected.add(id);
+          else selected.delete(id);
+        });
+        refreshBulkUI();
+      };
+    }
+
+    document.getElementById('admin-mushaira-clear-selection')?.addEventListener('click', () => {
+      selected.clear();
+      rowChecks().forEach(cb => { cb.checked = false; });
+      refreshBulkUI();
+    });
+
+    document.getElementById('admin-mushaira-bulk-delete')?.addEventListener('click', async () => {
+      if (!selected.size) return;
+      if (!confirm(`Delete ${selected.size} selected event(s)? This cannot be undone.`)) return;
+      await this._deleteMushairaEvents([...selected]);
     });
   },
 
