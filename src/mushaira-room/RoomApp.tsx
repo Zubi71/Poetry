@@ -6,7 +6,6 @@ import { HeroBanner } from './components/room/HeroBanner';
 import { CurrentlySpeaking } from './components/room/CurrentlySpeaking';
 import { SpeakersStage } from './components/room/SpeakersStage';
 import { AudienceSection } from './components/room/AudienceSection';
-import { PoetryFeed } from './components/room/PoetryFeed';
 import { LiveComments } from './components/room/LiveComments';
 import { BottomDock } from './components/room/BottomDock';
 import { PoetProfileModal } from './components/modals/PoetProfileModal';
@@ -53,19 +52,19 @@ export function RoomApp({ meta }: { meta: RoomMeta }) {
         speakers={store.speakers}
         myUserId={myUserId}
         maxSlots={store.maxSlots}
+        isHost={store.isHost}
         onSelectSeat={(slot) => store.actions.pickSeat(slot)}
         onToggleMic={() => store.actions.toggleMic()}
         onOpenProfile={setProfileTarget}
       />
 
-      <AudienceSection audience={store.audience} totalCount={store.audience.length} />
-
-      <PoetryFeed canPost={!!store.mySlot} authorName={Auth?.getCurrentUser?.()?.name || 'You'} />
+      <AudienceSection audience={store.audience} />
 
       <LiveComments
         messages={store.chatMessages}
         isHost={store.isHost}
         myUserId={myUserId}
+        commentsDisabled={store.commentsDisabled}
         onSend={(text) => store.actions.sendChat(text)}
         onPin={(id, pinned) => store.actions.pinChatMessage(id, pinned)}
         onDelete={(id) => store.actions.deleteChatMessage(id)}
@@ -113,9 +112,11 @@ export function RoomApp({ meta }: { meta: RoomMeta }) {
         onClose={() => setModPanelOpen(false)}
         participants={store.participants}
         handRequests={store.handRequests}
+        commentsDisabled={store.commentsDisabled}
         onHostAction={(action, userId) => store.actions.hostAction(action, userId)}
         onApproveHand={(id, userId) => store.actions.approveHandRequest(id, userId)}
         onDenyHand={(id, userId) => store.actions.denyHandRequest(id, userId)}
+        onToggleComments={() => store.actions.toggleComments()}
         onConfirmEndEvent={() => store.actions.confirmEndEvent()}
       />
 

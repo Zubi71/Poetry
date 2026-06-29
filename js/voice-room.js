@@ -35,6 +35,7 @@ const VoiceRoomLive = {
   _sessionCommentsChannel: null,
   _handRequests: [],
   _handRaised: false,
+  _commentsDisabled: false,
 
   get maxSlots() {
     if (this.roomMeta?.maxSeats) return this.roomMeta.maxSeats;
@@ -72,6 +73,7 @@ const VoiceRoomLive = {
       chatMessages: [...this.chatMessages],
       handRequests: [...this._handRequests],
       handRaised: this._handRaised,
+      commentsDisabled: this._commentsDisabled,
       micOn: this.micOn,
       mutedByHost: this.mutedByHost,
       canSpeak: this.canSpeak,
@@ -93,6 +95,7 @@ const VoiceRoomLive = {
     this.canSpeak = true;
     this.isSpeaking = false;
     this._handRaised = false;
+    this._commentsDisabled = false;
 
     if (Auth.isGuest()) {
       Components.showToast('Please sign in to join voice rooms', 'error');
@@ -477,6 +480,21 @@ const VoiceRoomLive = {
     this._appendSystemMessage(this._paused ? 'Session paused by host' : 'Session resumed');
     this._updateHostPanelVisibility();
     Components.showToast(this._paused ? 'Live session paused' : 'Live session resumed');
+  },
+
+  async _toggleComments() {
+    if (!this._isHost()) return;
+    this._commentsDisabled = !this._commentsDisabled;
+    if (this.channel) {
+      this.channel.send({
+        type: 'broadcast',
+        event: 'host_action',
+        payload: { action: this._commentsDisabled ? 'disable_comments' : 'enable_comments' }
+      });
+    }
+    this._appendSystemMessage(this._commentsDisabled ? 'Comments disabled by host' : 'Comments enabled by host');
+    this._emit();
+    Components.showToast(this._commentsDisabled ? 'Comments disabled for everyone' : 'Comments enabled');
   },
 
   _updateSeatStats() {
@@ -1273,6 +1291,31 @@ const VoiceRoomLive = {
         }
         if (isHost || fromSelf) this._appendSystemMessage(`${payload.targetName || 'User'}'s request to speak was declined`);
         break;
+      case 'demote':
+        if (isTarget) {
+          await this._stopMicTracks();
+          this.mySlot = null;
+          await this._updateMySlot(null);
+          this._handRaised = false;
+          this._emit();
+          Components.showToast('Host moved you back to the audience', 'error');
+        }
+        if (isHost || fromSelf) this._appendSystemMessage(`${payload.targetName || 'User'} was moved back to audience`);
+        break;
+      case 'disable_comments':
+        if (!isHost) {
+          this._commentsDisabled = true;
+          this._emit();
+          this._appendSystemMessage('Comments disabled by host');
+        }
+        break;
+      case 'enable_comments':
+        if (!isHost) {
+          this._commentsDisabled = false;
+          this._emit();
+          this._appendSystemMessage('Comments enabled by host');
+        }
+        break;
       case 'remove':
         if (isTarget) {
           if (this.roomMeta?.eventId && SupabaseClient.isEnabled()) {
@@ -1531,6 +1574,7 @@ const VoiceRoomLive = {
   confirmEndEvent() { return this._confirmEndMushairaEvent(); },
   endEvent() { return this._performEndMushairaEvent(); },
   togglePause() { return this._togglePauseLive(); },
+  toggleComments() { return this._toggleComments(); },
   startLiveSession() { return this._startLiveSession(); },
   leaveRoom() { this.destroy(); },
 

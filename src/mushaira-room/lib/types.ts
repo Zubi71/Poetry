@@ -53,6 +53,7 @@ export interface RoomSnapshot {
   chatMessages: ChatMessage[];
   handRequests: HandRequest[];
   handRaised: boolean;
+  commentsDisabled: boolean;
   micOn: boolean;
   mutedByHost: boolean;
   canSpeak: boolean;

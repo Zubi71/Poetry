@@ -9,6 +9,7 @@ export function SpeakersStage({
   speakers,
   myUserId,
   maxSlots,
+  isHost,
   onSelectSeat,
   onToggleMic,
   onOpenProfile
@@ -16,6 +17,7 @@ export function SpeakersStage({
   speakers: Participant[];
   myUserId?: string;
   maxSlots: number;
+  isHost: boolean;
   onSelectSeat: (slot: number) => void;
   onToggleMic: () => void;
   onOpenProfile: (p: Participant) => void;
@@ -62,7 +64,7 @@ export function SpeakersStage({
         })}
       </div>
 
-      {hasMoreSeats && (
+      {hasMoreSeats && isHost && (
         <button
           onClick={() => setVisibleSlots((v) => Math.min(maxSlots, v + SEATS_PER_EXPAND))}
           className="mr-mt-3 mr-w-full mr-rounded-xl mr-border mr-border-dashed mr-border-white/15 mr-py-2 mr-text-xs mr-font-semibold mr-text-mr-muted hover:mr-border-mr-gold/40 hover:mr-text-mr-gold"

@@ -9,6 +9,7 @@ const EMPTY_SNAPSHOT: RoomSnapshot = {
   chatMessages: [],
   handRequests: [],
   handRaised: false,
+  commentsDisabled: false,
   micOn: false,
   mutedByHost: false,
   canSpeak: true,
@@ -54,6 +55,7 @@ export function useVoiceRoomStore() {
       shareRoom: () => live?.shareRoom?.(),
       confirmEndEvent: () => live?.confirmEndEvent?.(),
       togglePause: () => live?.togglePause?.(),
+      toggleComments: () => live?.toggleComments?.(),
       startLiveSession: () => live?.startLiveSession?.(),
       leaveRoom: () => live?.leaveRoom?.()
     };

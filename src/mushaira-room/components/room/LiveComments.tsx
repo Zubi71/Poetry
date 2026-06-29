@@ -7,6 +7,7 @@ export function LiveComments({
   messages,
   isHost,
   myUserId,
+  commentsDisabled,
   onSend,
   onPin,
   onDelete
@@ -14,6 +15,7 @@ export function LiveComments({
   messages: ChatMessage[];
   isHost: boolean;
   myUserId?: string;
+  commentsDisabled: boolean;
   onSend: (text: string) => void;
   onPin: (dbId: string | number, pinned: boolean) => void;
   onDelete: (dbId: string | number) => void;
@@ -83,17 +85,23 @@ export function LiveComments({
         {!messages.length && <p className="mr-py-6 mr-text-center mr-text-sm mr-text-mr-muted">No comments yet — say something!</p>}
       </div>
 
-      <form onSubmit={submit} className="mr-mt-2 mr-flex mr-gap-2">
-        <input
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder="Write a comment…"
-          className="mr-flex-1 mr-rounded-full mr-border mr-border-white/10 mr-bg-white/5 mr-px-4 mr-py-2 mr-text-sm mr-text-white mr-placeholder-mr-muted mr-outline-none focus:mr-border-mr-gold/50"
-        />
-        <button type="submit" className="mr-rounded-full mr-bg-mr-gold-gradient mr-px-4 mr-py-2 mr-text-sm mr-font-semibold mr-text-black">
-          Send
-        </button>
-      </form>
+      {commentsDisabled && !isHost ? (
+        <p className="mr-mt-2 mr-rounded-full mr-border mr-border-white/10 mr-bg-white/5 mr-px-4 mr-py-2 mr-text-center mr-text-xs mr-text-mr-muted">
+          💬 Comments have been disabled by the host
+        </p>
+      ) : (
+        <form onSubmit={submit} className="mr-mt-2 mr-flex mr-gap-2">
+          <input
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder="Write a comment…"
+            className="mr-flex-1 mr-rounded-full mr-border mr-border-white/10 mr-bg-white/5 mr-px-4 mr-py-2 mr-text-sm mr-text-white mr-placeholder-mr-muted mr-outline-none focus:mr-border-mr-gold/50"
+          />
+          <button type="submit" className="mr-rounded-full mr-bg-mr-gold-gradient mr-px-4 mr-py-2 mr-text-sm mr-font-semibold mr-text-black">
+            Send
+          </button>
+        </form>
+      )}
     </section>
   );
 }

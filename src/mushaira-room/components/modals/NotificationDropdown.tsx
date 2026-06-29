@@ -51,37 +51,49 @@ export function NotificationDropdown({ open, onClose }: { open: boolean; onClose
   return (
     <AnimatePresence>
       {open && (
-        <motion.div
-          initial={{ opacity: 0, y: -10, scale: 0.97 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: -10, scale: 0.97 }}
-          className="mr-absolute mr-right-0 mr-top-12 mr-z-50 mr-w-72 mr-overflow-hidden mr-rounded-2xl mr-border mr-border-mr-gold/20 mr-bg-mr-bg-secondary mr-shadow-mr-gold-glow"
-          onMouseLeave={onClose}
-        >
-          <div className="mr-border-b mr-border-white/10 mr-px-4 mr-py-3">
-            <p className="mr-text-sm mr-font-bold mr-text-white">Notifications</p>
-          </div>
-          <div className="mr-max-h-80 mr-overflow-y-auto">
-            {loading && <p className="mr-px-4 mr-py-6 mr-text-center mr-text-sm mr-text-mr-muted">Loading…</p>}
-            {!loading && !notifications.length && (
-              <p className="mr-px-4 mr-py-6 mr-text-center mr-text-sm mr-text-mr-muted">No notifications yet</p>
-            )}
-            {notifications.map((n) => (
-              <a
-                key={n.id}
-                href={`#${linkFor(n)}`}
-                onClick={onClose}
-                className={`mr-flex mr-gap-2.5 mr-border-b mr-border-white/5 mr-px-4 mr-py-3 hover:mr-bg-white/5 ${n.read ? '' : 'mr-bg-mr-gold/5'}`}
-              >
-                <span className="mr-text-lg">{ICONS[n.type] || '📅'}</span>
-                <div className="mr-min-w-0 mr-flex-1">
-                  <p className="mr-truncate mr-text-sm mr-text-white">{n.text}</p>
-                  <p className="mr-text-[11px] mr-text-mr-muted">{n.time}</p>
-                </div>
-              </a>
-            ))}
-          </div>
-        </motion.div>
+        <>
+          {/* Dim backdrop behind the panel — without it the panel reads as a
+              transparent floating chip over the busy page underneath it. */}
+          <motion.div
+            key="notif-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="mr-fixed mr-inset-0 mr-z-40 mr-bg-black/60"
+            onClick={onClose}
+          />
+          <motion.div
+            key="notif-panel"
+            initial={{ opacity: 0, y: -10, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -10, scale: 0.97 }}
+            className="mr-absolute mr-right-0 mr-top-12 mr-z-50 mr-w-72 mr-overflow-hidden mr-rounded-2xl mr-border mr-border-mr-gold/20 mr-bg-mr-bg-secondary mr-shadow-mr-gold-glow"
+          >
+            <div className="mr-border-b mr-border-white/10 mr-px-4 mr-py-3">
+              <p className="mr-text-sm mr-font-bold mr-text-white">Notifications</p>
+            </div>
+            <div className="mr-max-h-80 mr-overflow-y-auto">
+              {loading && <p className="mr-px-4 mr-py-6 mr-text-center mr-text-sm mr-text-mr-muted">Loading…</p>}
+              {!loading && !notifications.length && (
+                <p className="mr-px-4 mr-py-6 mr-text-center mr-text-sm mr-text-mr-muted">No notifications yet</p>
+              )}
+              {notifications.map((n) => (
+                <a
+                  key={n.id}
+                  href={`#${linkFor(n)}`}
+                  onClick={onClose}
+                  className={`mr-flex mr-gap-2.5 mr-border-b mr-border-white/5 mr-px-4 mr-py-3 hover:mr-bg-white/5 ${n.read ? '' : 'mr-bg-mr-gold/5'}`}
+                >
+                  <span className="mr-text-lg">{ICONS[n.type] || '📅'}</span>
+                  <div className="mr-min-w-0 mr-flex-1">
+                    <p className="mr-truncate mr-text-sm mr-text-white">{n.text}</p>
+                    <p className="mr-text-[11px] mr-text-mr-muted">{n.time}</p>
+                  </div>
+                </a>
+              ))}
+            </div>
+          </motion.div>
+        </>
       )}
     </AnimatePresence>
   );

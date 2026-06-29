@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import type { HandRequest, Participant } from '../../lib/types';
 import { Modal } from '../ui/Modal';
 import { Avatar } from '../ui/AvatarStack';
@@ -9,26 +8,24 @@ export function ModeratorPanel({
   onClose,
   participants,
   handRequests,
+  commentsDisabled,
   onHostAction,
   onApproveHand,
   onDenyHand,
+  onToggleComments,
   onConfirmEndEvent
 }: {
   open: boolean;
   onClose: () => void;
   participants: Participant[];
   handRequests: HandRequest[];
+  commentsDisabled: boolean;
   onHostAction: (action: string, userId: string) => void;
   onApproveHand: (requestId: string | number, userId: string) => void;
   onDenyHand: (requestId: string | number, userId: string) => void;
+  onToggleComments: () => void;
   onConfirmEndEvent: () => void;
 }) {
-  // "Disable comments" has no backend flag yet (no comments_disabled column) —
-  // this toggle is host-local/cosmetic only per the agreed no-schema-change scope.
-  // It hides the composer on this host's screen; it does not stop other clients
-  // from posting, and is labeled as such below.
-  const [commentsDisabledLocally, setCommentsDisabledLocally] = useState(false);
-
   return (
     <Modal open={open} onClose={onClose} title="Moderator Controls">
       {handRequests.length > 0 && (
@@ -74,6 +71,14 @@ export function ModeratorPanel({
                     Add to Stage
                   </button>
                 )}
+                {p.slot && (
+                  <button
+                    onClick={() => onHostAction('demote', p.userId)}
+                    className="mr-rounded-full mr-bg-white/10 mr-px-2.5 mr-py-1 mr-text-[11px] mr-text-white"
+                  >
+                    Move to Audience
+                  </button>
+                )}
                 <button
                   onClick={() => onHostAction('remove', p.userId)}
                   className="mr-rounded-full mr-bg-red-500/20 mr-px-2.5 mr-py-1 mr-text-[11px] mr-text-red-300"
@@ -89,14 +94,14 @@ export function ModeratorPanel({
       <div className="mr-mb-4 mr-flex mr-items-center mr-justify-between mr-rounded-xl mr-bg-white/5 mr-px-3 mr-py-2.5">
         <div>
           <p className="mr-text-sm mr-text-white">Disable Comments</p>
-          <p className="mr-text-[11px] mr-text-mr-muted">Local to your view only — not enforced for other listeners yet</p>
+          <p className="mr-text-[11px] mr-text-mr-muted">Hides the comment box for everyone except you</p>
         </div>
         <button
-          onClick={() => setCommentsDisabledLocally((v) => !v)}
-          className={`mr-h-6 mr-w-11 mr-rounded-full mr-transition-colors ${commentsDisabledLocally ? 'mr-bg-mr-gold' : 'mr-bg-white/15'}`}
+          onClick={onToggleComments}
+          className={`mr-h-6 mr-w-11 mr-rounded-full mr-transition-colors ${commentsDisabled ? 'mr-bg-mr-gold' : 'mr-bg-white/15'}`}
         >
           <span
-            className={`mr-block mr-h-5 mr-w-5 mr-rounded-full mr-bg-white mr-transition-transform ${commentsDisabledLocally ? 'mr-translate-x-5' : 'mr-translate-x-0.5'}`}
+            className={`mr-block mr-h-5 mr-w-5 mr-rounded-full mr-bg-white mr-transition-transform ${commentsDisabled ? 'mr-translate-x-5' : 'mr-translate-x-0.5'}`}
           />
         </button>
       </div>
