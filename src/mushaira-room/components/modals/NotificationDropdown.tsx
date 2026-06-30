@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 
 interface Notif {
@@ -49,19 +50,29 @@ export function NotificationDropdown({ open, onClose }: { open: boolean; onClose
     n.poemId ? `/poem/${n.poemId}` : n.conversationId ? `/messages/${n.conversationId}` : '/notifications';
 
   return (
-    <AnimatePresence>
-      {open && (
-        <>
-          {/* Dim backdrop behind the panel — without it the panel reads as a
-              transparent floating chip over the busy page underneath it. */}
-          <motion.div
-            key="notif-backdrop"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="mr-fixed mr-inset-0 mr-z-40 mr-bg-black/60"
-            onClick={onClose}
-          />
+    <>
+      {/* Portaled to <body> — the header this bell lives in has
+          backdrop-blur, and Chromium (like filter) treats backdrop-filter
+          as creating a containing block for fixed descendants, which was
+          trapping this "fullscreen" backdrop inside the header's own
+          small box instead of covering the page. */}
+      {createPortal(
+        <AnimatePresence>
+          {open && (
+            <motion.div
+              key="notif-backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="mr-fixed mr-inset-0 mr-z-40 mr-bg-black/60"
+              onClick={onClose}
+            />
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
+      <AnimatePresence>
+        {open && (
           <motion.div
             key="notif-panel"
             initial={{ opacity: 0, y: -10, scale: 0.97 }}
@@ -93,8 +104,8 @@ export function NotificationDropdown({ open, onClose }: { open: boolean; onClose
               ))}
             </div>
           </motion.div>
-        </>
-      )}
-    </AnimatePresence>
+        )}
+      </AnimatePresence>
+    </>
   );
 }
