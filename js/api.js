@@ -451,6 +451,7 @@ const API = {
       time: this.timeAgo(row.created_at),
       poemId: row.poem_id,
       conversationId: row.conversation_id,
+      eventId: row.mushaira_event_id,
       actorId: row.actor_id,
       created_at: row.created_at
     };

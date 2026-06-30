@@ -577,8 +577,8 @@ const Realtime = {
   },
 
   renderNotificationHtml(n) {
-    const link = n.poemId ? `#/poem/${n.poemId}` : n.conversationId ? `#/messages/${n.conversationId}` : '#/notifications';
-    const icon = n.type === 'like' ? '❤️' : n.type === 'comment' ? '💬' : n.type === 'message' ? '✉️' : n.type === 'follow' ? '👤' : '📅';
+    const link = n.poemId ? `#/poem/${n.poemId}` : n.conversationId ? `#/messages/${n.conversationId}` : n.eventId ? `#/mushaira/live/${n.eventId}` : '#/notifications';
+    const icon = n.type === 'like' ? '❤️' : n.type === 'comment' ? '💬' : n.type === 'message' ? '✉️' : n.type === 'follow' ? '👤' : n.type === 'event' ? '🎤' : '📅';
     return `
       <a href="${link}" class="notification-item ${n.read ? '' : 'unread'} type-${n.type}" data-notif-id="${n.id}">
         <span class="notif-icon">${icon}</span>

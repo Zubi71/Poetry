@@ -622,10 +622,10 @@ const Pages = {
       </div>
       <div class="notifications-list" id="notifications-list">
         ${useLive ? '<p class="loading-inline">Loading notifications...</p>' : notifications.map(n => {
-          const link = n.poemId ? `#/poem/${n.poemId}` : '#';
+          const link = n.poemId ? `#/poem/${n.poemId}` : n.eventId ? `#/mushaira/live/${n.eventId}` : '#';
           return `
           <a href="${link}" class="notification-item ${n.read ? '' : 'unread'} type-${n.type}">
-            <span class="notif-icon">${n.type === 'like' ? '❤️' : n.type === 'comment' ? '💬' : n.type === 'follow' ? '👤' : '📅'}</span>
+            <span class="notif-icon">${n.type === 'like' ? '❤️' : n.type === 'comment' ? '💬' : n.type === 'follow' ? '👤' : n.type === 'event' ? '🎤' : '📅'}</span>
             <div>
               <p>${n.text}</p>
               <span class="notif-time">${n.time}</span>
