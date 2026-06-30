@@ -3,7 +3,6 @@ import type { Participant, RoomMeta } from './lib/types';
 import { useVoiceRoomStore } from './lib/useVoiceRoomStore';
 import { StickyHeader } from './components/room/StickyHeader';
 import { HeroBanner } from './components/room/HeroBanner';
-import { CurrentlySpeaking } from './components/room/CurrentlySpeaking';
 import { SpeakersStage } from './components/room/SpeakersStage';
 import { AudienceSection } from './components/room/AudienceSection';
 import { LiveComments } from './components/room/LiveComments';
@@ -45,9 +44,7 @@ export function RoomApp({ meta }: { meta: RoomMeta }) {
         onOpenInfo={setInfoPanel}
       />
 
-      <HeroBanner meta={roomMeta} />
-
-      <CurrentlySpeaking speaker={store.nowSpeaking} onOpenProfile={setProfileTarget} />
+      <HeroBanner meta={roomMeta} speaker={store.nowSpeaking} onOpenProfile={setProfileTarget} />
 
       <SpeakersStage
         speakers={store.speakers}
