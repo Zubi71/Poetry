@@ -4,7 +4,6 @@ import { useMushairaEvents, filterScheduleByDate, filterEndedEvents } from './li
 import { TabsNav } from './components/listing/TabsNav';
 import { LiveEventCard, ScheduledEventCard, EndedArchiveCard } from './components/listing/EventCards';
 import { ReplayModal } from './components/listing/ReplayModal';
-import { NotificationDropdown } from './components/modals/NotificationDropdown';
 import { Avatar } from './components/ui/AvatarStack';
 
 function readQuery() {
@@ -36,7 +35,6 @@ const ENDED_FILTERS = [
 export function ListingApp() {
   const [query, setQuery] = useState(readQuery());
   const [search, setSearch] = useState(query.q);
-  const [notifOpen, setNotifOpen] = useState(false);
   const [replayEvent, setReplayEvent] = useState<MushairaEvent | null>(null);
 
   useEffect(() => {
@@ -56,7 +54,6 @@ export function ListingApp() {
   };
 
   const user = Auth?.getCurrentUser?.();
-  const unread = (Storage?.getNotifications?.() || []).filter((n: any) => !n.read).length;
 
   return (
     <div className="mr-min-h-screen mr-bg-mr-bg mr-pb-24 mr-font-mr-sans mr-text-white">
@@ -66,21 +63,6 @@ export function ListingApp() {
         </span>
         <div className="mr-min-w-0 mr-flex-1">
           <h1 className="mr-text-base mr-font-bold mr-text-white">Live Mushaira</h1>
-        </div>
-        <div className="mr-relative">
-          <button
-            onClick={() => setNotifOpen((v) => !v)}
-            className="mr-relative mr-flex mr-h-9 mr-w-9 mr-items-center mr-justify-center mr-rounded-full mr-bg-white/5 mr-text-white"
-            aria-label="Notifications"
-          >
-            🔔
-            {unread > 0 && (
-              <span className="mr-absolute -mr-right-1 -mr-top-1 mr-flex mr-h-4 mr-min-w-[16px] mr-items-center mr-justify-center mr-rounded-full mr-bg-red-500 mr-px-1 mr-text-[10px] mr-font-bold mr-text-white">
-                {unread > 9 ? '9+' : unread}
-              </span>
-            )}
-          </button>
-          <NotificationDropdown open={notifOpen} onClose={() => setNotifOpen(false)} />
         </div>
         <a href="#/dashboard">
           <Avatar name={user?.name || 'Guest'} avatarUrl={user?.avatar} size={36} />
