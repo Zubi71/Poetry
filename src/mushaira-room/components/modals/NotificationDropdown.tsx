@@ -64,7 +64,7 @@ export function NotificationDropdown({ open, onClose }: { open: boolean; onClose
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="mr-fixed mr-inset-0 mr-z-40 mr-bg-black/60"
+              className="mr-fixed mr-inset-0 mr-z-40 mr-bg-black/70 mr-backdrop-blur-sm"
               onClick={onClose}
             />
           )}
